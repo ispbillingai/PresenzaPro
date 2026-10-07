@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/attendance.php';
 
 function strftime_it(int $ts): string
 {
@@ -16,6 +17,8 @@ $locations = userLocations((int)$user['id']);
 $last = lastAccepted((int)$user['id']);
 $next = nextClockType($last);
 $present = isPresentNow($last);
+$todayShift = allSchedules((int)$user['id'])[(int)$user['id']][(int)date('N')] ?? null;
+$todayHoliday = holidaysBetween(date('Y-m-d'), date('Y-m-d'))[date('Y-m-d')] ?? null;
 
 $today = fetchAll(
     'SELECT c.*, l.name AS location_name FROM clockings c
@@ -44,6 +47,11 @@ pageStart('Timbra', $user);
   <div class="clock-time" id="clock-time">--:--</div>
   <div class="clock-date"><?= e(ucfirst(strftime_it(time()))) ?></div>
   <p style="margin:0 0 .5rem">Ciao <strong><?= e($user['full_name']) ?></strong></p>
+  <?php if ($todayHoliday): ?>
+    <p class="help" style="margin:0 0 .5rem">Oggi è festivo (<?= e($todayHoliday) ?>).</p>
+  <?php elseif ($todayShift): ?>
+    <p class="help" style="margin:0 0 .5rem">Turno di oggi: <strong><?= e(substr($todayShift['start_time'], 0, 5)) ?> - <?= e(substr($todayShift['end_time'], 0, 5)) ?></strong> (<?= e($todayShift['name']) ?>)</p>
+  <?php endif; ?>
   <div class="clock-state" id="clock-state">
     <?php if ($present): ?>
       <span class="badge badge-in">In servizio</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>

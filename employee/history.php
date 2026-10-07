@@ -3,64 +3,82 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/attendance.php';
 
 $user = requireRole('employee');
+$uid = (int)$user['id'];
 
 $month = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['m'] ?? '')) ? $_GET['m'] : date('Y-m');
-$from = $month . '-01';
-$to = date('Y-m-t', strtotime($from));
+[$from, $to] = monthBounds($month);
+
+$report = attendanceReport($from, $to, $uid, false)[$uid] ?? null;
+$t = $report['totals'] ?? null;
 
 $rows = fetchAll(
     'SELECT c.*, l.name AS location_name FROM clockings c
      LEFT JOIN locations l ON l.id = c.location_id
-     WHERE c.user_id = ? AND DATE(c.clocked_at) BETWEEN ? AND ?
+     WHERE c.user_id = ? AND DATE(c.clocked_at) BETWEEN ? AND ? AND c.status <> "voided"
      ORDER BY c.clocked_at ASC, c.id ASC',
-    [(int)$user['id'], $from, $to]
+    [$uid, $from, $to]
 );
-$accepted = array_values(array_filter($rows, fn($r) => $r['status'] === 'accepted'));
-$sessions = buildWorkSessions($accepted)[(int)$user['id']] ?? [];
-$totalMin = array_sum(array_column($sessions, 'minutes'));
-
 $byDay = [];
 foreach ($rows as $r) {
     $byDay[substr($r['clocked_at'], 0, 10)][] = $r;
 }
-krsort($byDay);
 
 $prev = date('Y-m', strtotime($from . ' -1 month'));
 $next = date('Y-m', strtotime($from . ' +1 month'));
-$monthLabel = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'][(int)substr($month, 5, 2)] . ' ' . substr($month, 0, 4);
 
 pageStart('Storico', $user);
 ?>
 <div class="card">
   <div class="actions" style="justify-content:space-between;margin:0 0 .75rem">
     <a class="btn btn-sm" href="?m=<?= e($prev) ?>">‹ Mese prec.</a>
-    <strong><?= e($monthLabel) ?></strong>
+    <strong><?= e(monthLabel($month)) ?></strong>
     <a class="btn btn-sm" href="?m=<?= e($next) ?>" <?= $next > date('Y-m') ? 'style="visibility:hidden"' : '' ?>>Mese succ. ›</a>
   </div>
+  <?php if ($t): ?>
   <div class="stats">
-    <div class="stat"><span class="n"><?= count($sessions) ?></span><span class="l">giorni lavorati</span></div>
-    <div class="stat"><span class="n"><?= e(fmtMinutes((int)$totalMin)) ?></span><span class="l">ore totali</span></div>
+    <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['worked_min'])) ?></span><span class="l">ore lavorate<?= $t['expected_min'] ? ' su ' . e(fmtMinutes((int)$t['expected_min'])) . ' previste' : '' ?></span></div>
+    <div class="stat"><span class="n"><?= (int)$t['days_present'] ?></span><span class="l">giorni presenti</span></div>
+    <?php if ($t['days_scheduled']): ?>
+    <div class="stat"><span class="n"><?= (int)$t['days_absent'] ?></span><span class="l">assenze</span></div>
+    <div class="stat"><span class="n"><?= (int)$t['late_count'] ?></span><span class="l">ritardi</span></div>
+    <?php endif; ?>
+    <?php if ($t['days_ferie'] || $t['days_malattia'] || $t['permesso_min']): ?>
+    <div class="stat"><span class="n"><?= (int)$t['days_ferie'] ?> / <?= (int)$t['days_malattia'] ?></span><span class="l">ferie / malattia</span></div>
+    <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['permesso_min'])) ?></span><span class="l">permessi</span></div>
+    <?php endif; ?>
+    <?php if ($t['overtime_min']): ?>
+    <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['overtime_min'])) ?></span><span class="l">straordinario</span></div>
+    <?php endif; ?>
   </div>
+  <?php endif; ?>
 </div>
 
-<?php if (!$byDay): ?>
-  <div class="card"><span class="help">Nessuna timbratura in questo mese.</span></div>
-<?php endif; ?>
-
-<?php foreach ($byDay as $day => $items): $s = $sessions[$day] ?? null; ?>
+<?php
+$shown = 0;
+if ($report) {
+    foreach (array_reverse($report['days']) as $d) {
+        $items = $byDay[$d['date']] ?? [];
+        if ($d['date'] > date('Y-m-d')) continue;
+        if (!$items && in_array($d['status'], ['rest', 'future'], true)) continue;
+        $shown++;
+        ?>
 <div class="card">
-  <h2 style="display:flex;justify-content:space-between;align-items:center">
-    <span><?= e(fmtDate($day, 'd/m/Y')) ?></span>
-    <?php if ($s): ?>
-      <span class="badge <?= $s['open'] && $day !== date('Y-m-d') ? 'badge-warn' : 'badge-ok' ?>"><?= e(fmtMinutes((int)$s['minutes'])) ?><?= $s['open'] ? ' (aperta)' : '' ?></span>
-    <?php endif; ?>
+  <h2 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+    <span><?= e(WEEKDAY_LABELS[$d['weekday']]) ?> <?= e(fmtDate($d['date'], 'd/m')) ?> <?= $d['shift'] ? '<span class="help">' . e(substr($d['shift']['start_time'], 0, 5) . '-' . substr($d['shift']['end_time'], 0, 5)) . '</span>' : '' ?></span>
+    <span>
+      <?= dayStatusBadge($d) ?>
+      <?php if ($d['worked_min']): ?><span class="badge badge-ok"><?= e(fmtMinutes((int)$d['worked_min'])) ?></span><?php endif; ?>
+      <?php foreach ($d['flags'] as $f): ?><span class="badge <?= str_starts_with($f, 'straord') ? 'badge-ok' : 'badge-warn' ?>"><?= e($f) ?></span><?php endforeach; ?>
+    </span>
   </h2>
+  <?php if ($items): ?>
   <ul class="today-list">
-    <?php foreach (array_reverse($items) as $c): ?>
+    <?php foreach ($items as $c): ?>
       <li>
-        <span><?= e(fmtDate($c['clocked_at'], 'H:i')) ?> · <?= $c['type'] === 'in' ? 'Entrata' : 'Uscita' ?><?= $c['location_name'] ? ' · ' . e($c['location_name']) : '' ?></span>
+        <span><?= e(fmtDate($c['clocked_at'], 'H:i')) ?> · <?= $c['type'] === 'in' ? 'Entrata' : 'Uscita' ?><?= $c['location_name'] ? ' · ' . e($c['location_name']) : '' ?><?= $c['source'] === 'manual' ? ' · <span class="help">manuale</span>' : '' ?></span>
         <?php if ($c['status'] === 'accepted'): ?>
           <span class="badge badge-ok">OK</span>
         <?php else: ?>
@@ -69,6 +87,12 @@ pageStart('Storico', $user);
       </li>
     <?php endforeach; ?>
   </ul>
+  <?php endif; ?>
 </div>
-<?php endforeach; ?>
+<?php
+    }
+}
+if ($shown === 0): ?>
+  <div class="card"><span class="help">Nessuna presenza in questo mese.</span></div>
+<?php endif; ?>
 <?php pageEnd(); ?>

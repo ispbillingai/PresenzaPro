@@ -53,7 +53,8 @@ pageStart('Riepilogo', $user);
   <ol style="margin:0;padding-left:1.2rem">
     <li><a href="/admin/locations.php">Crea una sede di lavoro</a> con posizione sulla mappa e raggio consentito.</li>
     <li><a href="/admin/employees.php">Aggiungi i dipendenti</a> e assegna a ciascuno la sua sede.</li>
-    <li>Ogni dipendente accede dal telefono con il proprio nome utente e timbra solo se si trova sul posto.</li>
+    <li><a href="/admin/shifts.php">Definisci le fasce orarie</a> e assegna l'orario settimanale a ogni dipendente, per calcolare ore previste, ritardi e assenze.</li>
+    <li>Ogni dipendente accede dal telefono con il suo link personale (o nome utente e password) e timbra solo se si trova sul posto.</li>
   </ol>
 </div>
 <?php endif; ?>

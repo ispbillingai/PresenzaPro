@@ -3,9 +3,11 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/attendance.php';
 
 $user = requireRole('admin');
 $locations = fetchAll('SELECT id, name, is_active FROM locations ORDER BY is_active DESC, name');
+$shifts = shiftsMap(true);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfCheck();
@@ -21,6 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/admin/employees.php');
     }
 
+    if (($action === 'token_new' || $action === 'token_revoke') && $id) {
+        $token = $action === 'token_new' ? bin2hex(random_bytes(32)) : null;
+        q('UPDATE users SET login_token = ?, token_created_at = ? WHERE id = ? AND role = "employee"', [$token, $token ? date('Y-m-d H:i:s') : null, $id]);
+        flash('ok', $token ? 'Nuovo link personale generato. Il link precedente non funziona più.' : 'Link personale revocato.');
+        redirect('/admin/employees.php?edit=' . $id . '#link');
+    }
+
     if ($action === 'save') {
         $fullName = trim((string)($_POST['full_name'] ?? ''));
         $username = strtolower(trim((string)($_POST['username'] ?? '')));
@@ -28,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim((string)($_POST['email'] ?? '')) ?: null;
         $phone = trim((string)($_POST['phone'] ?? '')) ?: null;
         $locIds = array_map('intval', (array)($_POST['locations'] ?? []));
+        $schedule = (array)($_POST['shift'] ?? []);
 
         $errors = [];
         if ($fullName === '') $errors[] = 'Il nome è obbligatorio.';
@@ -60,6 +70,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q('INSERT IGNORE INTO user_locations (user_id, location_id) VALUES (?, ?)', [$id, $lid]);
             }
         }
+        q('DELETE FROM user_shifts WHERE user_id = ?', [$id]);
+        for ($wd = 1; $wd <= 7; $wd++) {
+            $sid = (int)($schedule[$wd] ?? 0);
+            if ($sid > 0 && isset($shifts[$sid])) {
+                q('INSERT INTO user_shifts (user_id, weekday, shift_id) VALUES (?, ?, ?)', [$id, $wd, $sid]);
+            }
+        }
         $pdo->commit();
         flash('ok', 'Dipendente salvato.');
         redirect('/admin/employees.php');
@@ -68,16 +85,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $editing = null;
 $editLocs = [];
+$editSchedule = [];
 if (isset($_GET['edit'])) {
     $editing = fetchOne('SELECT * FROM users WHERE id = ? AND role = "employee"', [(int)$_GET['edit']]);
     if ($editing) {
         $editLocs = array_map('intval', array_column(fetchAll('SELECT location_id FROM user_locations WHERE user_id = ?', [(int)$editing['id']]), 'location_id'));
+        foreach (fetchAll('SELECT weekday, shift_id FROM user_shifts WHERE user_id = ?', [(int)$editing['id']]) as $r) {
+            $editSchedule[(int)$r['weekday']] = (int)$r['shift_id'];
+        }
     }
 }
 $showForm = $editing || isset($_GET['new']);
 
 $employees = fetchAll(
-    'SELECT u.*, GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ", ") AS location_names
+    'SELECT u.*, GROUP_CONCAT(DISTINCT l.name ORDER BY l.name SEPARATOR ", ") AS location_names,
+            (SELECT COUNT(*) FROM user_shifts us WHERE us.user_id = u.id) AS n_shift_days
      FROM users u
      LEFT JOIN user_locations ul ON ul.user_id = u.id
      LEFT JOIN locations l ON l.id = ul.location_id
@@ -114,37 +136,92 @@ pageStart('Dipendenti', $user);
     <div class="inline-fields">
       <label><?= $editing ? 'Nuova password (vuoto = invariata)' : 'Password' ?> <input type="text" name="password" <?= $editing ? '' : 'required' ?> minlength="8" autocomplete="new-password"></label>
       <label>Email <input type="email" name="email" value="<?= e($editing['email'] ?? '') ?>"></label>
-      <label>Telefono <input type="tel" name="phone" value="<?= e($editing['phone'] ?? '') ?>"></label>
+      <label>Telefono (cellulare, per WhatsApp) <input type="tel" name="phone" value="<?= e($editing['phone'] ?? '') ?>" placeholder="es. 3331234567"></label>
     </div>
-    <label>Sedi assegnate <span class="help">(può timbrare solo entro il raggio di queste sedi)</span>
-      <?php if (!$locations): ?>
-        <div class="help">Nessuna sede: <a href="/admin/locations.php?new=1">creane una</a>.</div>
-      <?php endif; ?>
-      <div class="checks" style="margin-top:.4rem">
-        <?php foreach ($locations as $l): ?>
-          <label><input type="checkbox" name="locations[]" value="<?= (int)$l['id'] ?>" <?= in_array((int)$l['id'], $editLocs, true) ? 'checked' : '' ?>> <?= e($l['name']) ?><?= (int)$l['is_active'] ? '' : ' (disattivata)' ?></label>
-        <?php endforeach; ?>
-      </div>
-    </label>
+
+    <h2>Sedi assegnate</h2>
+    <p class="help" style="margin:0 0 .4rem">Può timbrare solo entro il raggio di queste sedi.</p>
+    <?php if (!$locations): ?>
+      <div class="help">Nessuna sede: <a href="/admin/locations.php?new=1">creane una</a>.</div>
+    <?php endif; ?>
+    <div class="checks" style="margin-bottom:1rem">
+      <?php foreach ($locations as $l): ?>
+        <label><input type="checkbox" name="locations[]" value="<?= (int)$l['id'] ?>" <?= in_array((int)$l['id'], $editLocs, true) ? 'checked' : '' ?>> <?= e($l['name']) ?><?= (int)$l['is_active'] ? '' : ' (disattivata)' ?></label>
+      <?php endforeach; ?>
+    </div>
+
+    <h2>Orario settimanale</h2>
+    <p class="help" style="margin:0 0 .4rem">Fascia oraria prevista per ogni giorno. "Riposo" = nessuna ora prevista. <a href="/admin/shifts.php">Gestisci le fasce orarie</a>.</p>
+    <?php if (!$shifts): ?>
+      <div class="alert alert-warn">Nessuna fascia oraria definita: <a href="/admin/shifts.php?new=1">creane una</a> per calcolare ore previste, ritardi e assenze.</div>
+    <?php endif; ?>
+    <div class="inline-fields">
+      <?php foreach (WEEKDAY_LABELS as $wd => $label): ?>
+        <label style="flex:1 1 120px"><?= e($label) ?>
+          <select name="shift[<?= $wd ?>]">
+            <option value="0">Riposo</option>
+            <?php foreach ($shifts as $s): ?>
+              <option value="<?= (int)$s['id'] ?>" <?= ($editSchedule[$wd] ?? 0) === (int)$s['id'] ? 'selected' : '' ?>><?= e(shiftLabel($s)) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+      <?php endforeach; ?>
+    </div>
+
     <div class="actions">
       <button class="btn btn-primary" type="submit">Salva</button>
       <a class="btn" href="/admin/employees.php">Annulla</a>
     </div>
   </form>
 </div>
+
+<?php if ($editing): $link = personalLink($editing); $wa = whatsappNumber($editing['phone']); ?>
+<div class="card" id="link">
+  <h2>Link personale di accesso</h2>
+  <p class="help" style="margin:0 0 .75rem">Un link unico per <?= e($editing['full_name']) ?>: aprendolo sul telefono entra direttamente nella pagina di timbratura senza digitare la password. Chi ha il link può timbrare come questo dipendente: invialo solo a lui e revocalo se cambia telefono.</p>
+  <?php if ($link): ?>
+    <div class="inline-fields">
+      <input type="text" readonly id="personal-link" value="<?= e($link) ?>" style="flex:1 1 300px;margin:0" onclick="this.select()">
+      <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('personal-link').value).then(function(){alert('Link copiato.')})">Copia</button>
+      <?php if ($wa): ?>
+        <a class="btn btn-primary" target="_blank" rel="noopener" href="https://wa.me/<?= e($wa) ?>?text=<?= rawurlencode("Ciao " . $editing['full_name'] . ", questo è il tuo link personale per timbrare le presenze:\n" . $link . "\nAprilo dal telefono e consenti l'accesso alla posizione. Non condividerlo con nessuno.") ?>">Invia via WhatsApp</a>
+      <?php else: ?>
+        <span class="help">Inserisci il cellulare per inviarlo via WhatsApp.</span>
+      <?php endif; ?>
+    </div>
+    <p class="help">Generato il <?= e(fmtDate($editing['token_created_at'])) ?>.</p>
+  <?php else: ?>
+    <p class="help">Nessun link attivo. Il dipendente accede con nome utente e password.</p>
+  <?php endif; ?>
+  <div class="actions">
+    <form method="post" class="inline">
+      <?= csrfField() ?><input type="hidden" name="action" value="token_new"><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>">
+      <button class="btn" type="submit"><?= $link ? 'Rigenera link' : 'Genera link' ?></button>
+    </form>
+    <?php if ($link): ?>
+    <form method="post" class="inline" onsubmit="return confirm('Revocare il link? Il dipendente dovrà usare nome utente e password.')">
+      <?= csrfField() ?><input type="hidden" name="action" value="token_revoke"><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>">
+      <button class="btn btn-danger" type="submit">Revoca</button>
+    </form>
+    <?php endif; ?>
+  </div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 
 <div class="card table-wrap">
   <?php if (!$employees): ?><span class="help">Nessun dipendente ancora.</span><?php endif; ?>
   <?php if ($employees): ?>
   <table>
-    <thead><tr><th>Nome</th><th>Utente</th><th>Sedi</th><th>Stato</th><th>Ultimo accesso</th><th></th></tr></thead>
+    <thead><tr><th>Nome</th><th>Utente</th><th>Sedi</th><th>Orario</th><th>Link</th><th>Stato</th><th>Ultimo accesso</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($employees as $emp): $l = $lastMap[(int)$emp['id']] ?? null; $in = $l && $l['type'] === 'in' && substr($l['clocked_at'], 0, 10) === date('Y-m-d'); ?>
       <tr class="<?= (int)$emp['is_active'] ? '' : 'muted' ?>">
         <td><?= e($emp['full_name']) ?><br><span class="help"><?= e($emp['phone'] ?? '') ?></span></td>
         <td><?= e($emp['username']) ?></td>
         <td><?= e($emp['location_names'] ?? '') ?: '<span class="badge badge-warn">nessuna</span>' ?></td>
+        <td><?= (int)$emp['n_shift_days'] ? (int)$emp['n_shift_days'] . ' gg/sett.' : '<span class="badge badge-warn">nessuno</span>' ?></td>
+        <td><?= $emp['login_token'] ? '<span class="badge badge-ok">attivo</span>' : '<span class="help">no</span>' ?></td>
         <td>
           <?php if (!(int)$emp['is_active']): ?><span class="badge badge-off">disattivato</span>
           <?php elseif ($in): ?><span class="badge badge-in">in servizio</span>

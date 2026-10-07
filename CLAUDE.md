@@ -8,7 +8,12 @@ time tracking with GPS-bound clock-in/out). Nothing is shared with pub except th
 PHP 8.3 + MariaDB, no framework, Italian UI. See README.md for the structure and the clocking rules.
 - Admin: dipendenti, sedi (lat/lng + raggio, Leaflet map picker), assegnazioni, timbrature, report ore, impostazioni.
 - Dipendente: `employee/` clock page (watchPosition → `api/clock.php`), monthly history.
-- Every clock attempt is stored in `clockings` (accepted or rejected, with reason and GPS data).
+- Every clock attempt is stored in `clockings` (accepted / rejected / voided, source gps or manual, with reason and GPS data).
+- "Badge reader" features (2026-10-07, migration 001): shifts + weekly schedule per employee, absences
+  (ferie/permesso/malattia/altro, whole-day or hours), company holidays + computed Italian national ones,
+  manual clockings and voiding by admin, monthly summary in `admin/reports.php` computed by
+  `includes/attendance.php::attendanceReport()`. Personal login link per employee: `t.php?k=<token>`
+  (generate/revoke in the employee form, WhatsApp share via wa.me).
 
 ## Where it runs
 - Server: 217.160.131.242 (IONOS Ubuntu 24.04, Apache 2.4, PHP 8.3, MariaDB 10.11), SSH as root.

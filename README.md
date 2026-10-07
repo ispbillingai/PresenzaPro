@@ -9,8 +9,19 @@ PHP 8.3, MariaDB 10.11, Apache. Nessuna dipendenza esterna lato server. Leaflet 
 (CDN) per la mappa delle sedi nell'area admin.
 
 ## Ruoli
-- **Admin**: dipendenti, sedi (punto + raggio), assegnazioni, timbrature, report ore, impostazioni.
-- **Dipendente**: pagina "Timbra" (entrata/uscita con GPS) e storico mensile.
+- **Admin**: dipendenti (con link personale di accesso inviabile via WhatsApp), sedi (punto + raggio),
+  fasce orarie e orario settimanale, timbrature (anche manuali, annullabili), assenze/permessi,
+  riepilogo mensile stile lettore badge, festività, impostazioni.
+- **Dipendente**: pagina "Timbra" (entrata/uscita con GPS, turno del giorno) e storico mensile con stato di ogni giorno.
+
+## Riepilogo mensile (logica "lettore badge")
+`includes/attendance.php` calcola per ogni dipendente e giorno: fascia prevista (da `user_shifts`,
+1 = lunedì … 7 = domenica), ore previste (turno meno pausa, zero nei festivi nazionali + `holidays`),
+ore lavorate (coppie entrata/uscita accettate, manuali comprese, annullate escluse), stato
+(presente, assente, ferie, permesso, malattia, riposo, festivo), ritardo e uscita anticipata oltre la
+tolleranza del turno, straordinario oltre `overtime_min_minutes`, uscite mancanti. Un giustificativo
+senza ore copre l'intera giornata; con le ore riduce le ore previste di quel giorno.
+Il link personale `/t.php?k=<token>` fa entrare il dipendente senza password (token revocabile).
 
 ## Installazione
 ```

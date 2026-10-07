@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
+require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/attendance.php';
 
 $user = requireRole('admin');
 
@@ -13,14 +15,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $company = trim((string)($_POST['company_name'] ?? ''));
         $maxAcc = (int)($_POST['max_accuracy_m'] ?? 150);
         $maxAge = (int)($_POST['max_fix_age_s'] ?? 120);
+        $otMin = (int)($_POST['overtime_min_minutes'] ?? 15);
         if ($company === '') $company = APP_NAME;
-        $maxAcc = max(10, min(2000, $maxAcc));
-        $maxAge = max(10, min(3600, $maxAge));
         setSetting('company_name', $company);
-        setSetting('max_accuracy_m', (string)$maxAcc);
-        setSetting('max_fix_age_s', (string)$maxAge);
+        setSetting('max_accuracy_m', (string)max(10, min(2000, $maxAcc)));
+        setSetting('max_fix_age_s', (string)max(10, min(3600, $maxAge)));
+        setSetting('overtime_min_minutes', (string)max(0, min(240, $otMin)));
         flash('ok', 'Impostazioni salvate.');
         redirect('/admin/settings.php');
+    }
+
+    if ($action === 'holiday_add') {
+        $date = (string)($_POST['date'] ?? '');
+        $name = trim((string)($_POST['name'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $name === '') {
+            flash('error', 'Data e nome obbligatori.');
+        } else {
+            q('INSERT INTO holidays (`date`, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)', [$date, $name]);
+            flash('ok', 'Festività aggiunta.');
+        }
+        redirect('/admin/settings.php#holidays');
+    }
+
+    if ($action === 'holiday_delete') {
+        q('DELETE FROM holidays WHERE `date` = ?', [(string)($_POST['date'] ?? '')]);
+        flash('ok', 'Festività rimossa.');
+        redirect('/admin/settings.php#holidays');
     }
 
     if ($action === 'password') {
@@ -41,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$customHolidays = fetchAll('SELECT * FROM holidays WHERE `date` >= ? ORDER BY `date`', [date('Y-01-01')]);
+$year = (int)date('Y');
+
 pageStart('Impostazioni', $user);
 ?>
 <h1>Impostazioni</h1>
@@ -59,9 +82,14 @@ pageStart('Impostazioni', $user);
         <input type="number" name="max_fix_age_s" min="10" max="3600" value="<?= e(setting('max_fix_age_s', '120')) ?>">
         <span class="help">Rileva posizioni vecchie o orologi manomessi sul telefono.</span>
       </label>
+      <label>Straordinario: minuti minimi oltre l'orario
+        <input type="number" name="overtime_min_minutes" min="0" max="240" value="<?= e(setting('overtime_min_minutes', '15')) ?>">
+        <span class="help">Sotto questa soglia il tempo in più non viene conteggiato come straordinario.</span>
+      </label>
       <button class="btn btn-primary" type="submit">Salva</button>
     </form>
   </div>
+
   <div class="card">
     <h2>Cambia la tua password</h2>
     <form method="post" autocomplete="off">
@@ -73,6 +101,44 @@ pageStart('Impostazioni', $user);
       <button class="btn btn-primary" type="submit">Aggiorna password</button>
     </form>
     <p class="help" style="margin-top:1rem">Accesso come <strong><?= e($user['full_name']) ?></strong> (<?= e($user['username']) ?>).</p>
+  </div>
+
+  <div class="card" id="holidays">
+    <h2>Festività</h2>
+    <p class="help" style="margin:0 0 .5rem">Nei giorni festivi non ci sono ore previste. Le festività nazionali italiane sono già incluse; aggiungi qui il patrono o le chiusure aziendali.</p>
+    <form method="post" class="inline-fields">
+      <?= csrfField() ?>
+      <input type="hidden" name="action" value="holiday_add">
+      <label>Data <input type="date" name="date" required></label>
+      <label>Nome <input type="text" name="name" required placeholder="es. Santo Patrono"></label>
+      <label style="flex:0 0 auto"><span>&nbsp;</span><button class="btn btn-primary" type="submit">Aggiungi</button></label>
+    </form>
+    <?php if ($customHolidays): ?>
+    <table style="margin-top:.5rem">
+      <tbody>
+      <?php foreach ($customHolidays as $hd): ?>
+        <tr>
+          <td><?= e(fmtDate($hd['date'], 'd/m/Y')) ?></td>
+          <td><?= e($hd['name']) ?></td>
+          <td class="num">
+            <form method="post" class="inline">
+              <?= csrfField() ?><input type="hidden" name="action" value="holiday_delete"><input type="hidden" name="date" value="<?= e($hd['date']) ?>">
+              <button class="btn btn-sm btn-danger" type="submit">Rimuovi</button>
+            </form>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    <?php endif; ?>
+    <details style="margin-top:.75rem">
+      <summary class="help">Festività nazionali <?= $year ?></summary>
+      <ul class="help" style="margin:.4rem 0 0;padding-left:1.2rem">
+        <?php foreach (italianHolidays($year) as $d => $n): ?>
+          <li><?= e(fmtDate($d, 'd/m')) ?> <?= e($n) ?></li>
+        <?php endforeach; ?>
+      </ul>
+    </details>
   </div>
 </div>
 <?php pageEnd(); ?>

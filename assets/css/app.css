@@ -92,6 +92,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .badge-rej { background: var(--err-bg); color: var(--err); }
 .badge-off { background: #eee; color: #777; }
 .badge-warn { background: var(--warn-bg); color: var(--warn); }
+.badge-info { background: #e3ecf7; color: #1f4e79; }
 
 /* Employee clock page */
 .clock-card { text-align: center; }

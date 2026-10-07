@@ -11,8 +11,10 @@ function pageStart(string $title, ?array $user = null, array $opts = []): void
                 '/admin/' => 'Riepilogo',
                 '/admin/employees.php' => 'Dipendenti',
                 '/admin/locations.php' => 'Sedi',
+                '/admin/shifts.php' => 'Fasce orarie',
                 '/admin/clockings.php' => 'Timbrature',
-                '/admin/reports.php' => 'Report',
+                '/admin/absences.php' => 'Assenze',
+                '/admin/reports.php' => 'Riepilogo mensile',
                 '/admin/settings.php' => 'Impostazioni',
             ];
         } else {
