@@ -180,6 +180,51 @@ pageStart('Dipendenti', $user);
         </label>
       <?php endforeach; ?>
     </div>
+    <?php
+    $copyFrom = [];
+    foreach (allSchedules() as $otherId => $days) {
+        if ($editing && (int)$editing['id'] === (int)$otherId) continue;
+        $copyFrom[(int)$otherId] = array_map(fn($d) => (int)$d['id'], $days);
+    }
+    $copyNames = [];
+    foreach (fetchAll('SELECT id, full_name, is_active FROM users WHERE role = "employee" ORDER BY is_active DESC, full_name') as $o) {
+        if (isset($copyFrom[(int)$o['id']])) $copyNames[(int)$o['id']] = $o['full_name'] . ((int)$o['is_active'] ? '' : ' (disattivato)');
+    }
+    ?>
+    <?php if ($copyNames): ?>
+    <div class="inline-fields" style="align-items:flex-end;margin-top:.25rem">
+      <label style="flex:1 1 260px;margin-bottom:0">Copia l'orario settimanale di
+        <select id="copy-from">
+          <option value="">Scegli un dipendente…</option>
+          <?php foreach ($copyNames as $oid => $name): ?>
+            <option value="<?= $oid ?>"><?= e($name) ?> · <?= count($copyFrom[$oid]) ?> gg</option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <button type="button" class="btn" id="btn-copy" data-schedules="<?= e(json_encode($copyFrom)) ?>">Copia</button>
+      <span class="help" id="copy-msg"></span>
+    </div>
+    <script>
+    (function () {
+      var btn = document.getElementById('btn-copy'), sel = document.getElementById('copy-from'), msg = document.getElementById('copy-msg');
+      var all = {};
+      try { all = JSON.parse(btn.dataset.schedules || '{}'); } catch (e) {}
+      btn.addEventListener('click', function () {
+        var id = sel.value;
+        if (!id) { msg.textContent = 'Scegli prima un dipendente.'; return; }
+        var sched = all[id] || {}, missing = 0;
+        for (var wd = 1; wd <= 7; wd++) {
+          var s = document.querySelector('select[name="shift[' + wd + ']"]');
+          if (!s) continue;
+          var v = String(sched[wd] || 0);
+          if (v !== '0' && !s.querySelector('option[value="' + v + '"]')) { v = '0'; missing++; }
+          s.value = v;
+        }
+        msg.textContent = 'Orario copiato da ' + sel.options[sel.selectedIndex].text.replace(/ · .*$/, '') + (missing ? ' (' + missing + ' giorni con fascia disattivata impostati a Riposo)' : '') + '. Premi Salva per confermare.';
+      });
+    })();
+    </script>
+    <?php endif; ?>
 
     <h2 id="webhook">Webhook alla timbratura</h2>
     <p class="help" style="margin:0 0 .4rem">URL chiamato in GET ogni volta che questo dipendente timbra (solo timbrature accettate). Puoi usare i segnaposto <code>{user_id} {username} {name} {type} {type_label} {date} {time} {datetime} {timestamp} {location} {lat} {lng} {clocking_id}</code>; senza segnaposto gli stessi valori vengono aggiunti come parametri. <code>type</code> vale in, out, break_start o break_end.<?= webhooksEnabled() ? '' : ' <strong>Attenzione: i webhook sono disattivati globalmente nelle Impostazioni.</strong>' ?></p>
