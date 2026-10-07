@@ -1,0 +1,51 @@
+# RestoPOS - Nginx Configuration Example
+# Save this as /etc/nginx/sites-available/restaurant-pos
+
+server {
+    listen 80;
+    server_name your-domain.com;  # Change this
+    root /var/www/restaurant-pos;  # Change this to your install path
+    index index.php;
+
+    # Logging
+    access_log /var/log/nginx/restaurant-pos.access.log;
+    error_log /var/log/nginx/restaurant-pos.error.log;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Handle PHP files
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;  # Adjust PHP version
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_intercept_errors on;
+    }
+
+    # Main location
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # Static assets caching
+    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Deny access to sensitive files
+    location ~ /\.(ht|git|env) {
+        deny all;
+    }
+
+    location ~ ^/config/ {
+        deny all;
+    }
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 1000;
+}

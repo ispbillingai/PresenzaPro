@@ -1,0 +1,14 @@
+- [Push after every change](push-after-every-change.md) — ALWAYS deploy myself after every change: push, pull + migrate in /var/www/html/ristorante, test live
+- [Parking reference app](parking-reference-app.md) — port payment/printing from F:\xampp\htdocs\parking (not F:\parking)
+- [Device payment architecture](device-payment-architecture.md) — card runs through Epson RT printer (Protocol 17); curl(28)=LAN IP unreachable
+- [Users never deleted](users-never-deleted.md) — users are only disabled/enabled, never deleted (preserves history)
+- [Panificio Azzurro network](panificio-azzurro-network.md) — server/MikroTik SSH logins, WireGuard topology, OpenVPN setup, shop device IPs, plink one-liners
+- [No WireGuard changes](no-wireguard-changes.md) — never modify the existing WG tunnel; remote access goes through OpenVPN only
+- [CRM deploy workflow](crm-deploy-workflow.md) — edit locally, push, git pull on server; never edit server directly
+- [Ristorante is the order repo](ristorante-is-order-repo.md) — we work on ristorante (=order repo=f:\order); crm/bitrix is a separate app, leave it alone
+- [Device monitor feature](device-monitor-feature.md) — admin Devices + Network Areas pages; server polls MikroTik API on a cron for shop-device up/down
+- [Customer requests 2026-09](customer-requests-2026-09.md) — Dojo + Glovo built (awaiting credentials); kiosk vision, CRM calendar, lead phone bug still open
+- [CRM feature requests 2026-07](crm-feature-requests-2026-07.md) — 7 customer requests: In Contact rename, portal access tracking, Partners/referrers, agent query, Discarded fix
+- [DB collation](db-collation-unicode.md) — new tables need COLLATE utf8mb4_unicode_ci; server default general_ci breaks UNIONs live, local tests miss it
+- [Reset orders+customers](reset-orders-customers.md) — "cancella ordini e clienti/utenti" = orders + guest data only, never staff; no backup while testing
+- [Test mode virtual payment](test-mode-virtual-payment.md) — temporary till button "Pagamento virtuale" (Settings › Modalità test); remove when client ends testing
