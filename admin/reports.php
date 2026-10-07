@@ -113,7 +113,10 @@ pageStart('Riepilogo mensile', $user);
 </div>
 
 <?php elseif (isset($report[$uid])): $r = $report[$uid]; $t = $r['totals']; ?>
-<h2><?= e($r['user']['full_name']) ?></h2>
+<div class="actions" style="justify-content:space-between;margin-bottom:.5rem">
+  <h2 style="margin:0"><?= e($r['user']['full_name']) ?></h2>
+  <a class="btn" href="/admin/timecard.php?user=<?= $uid ?>&m=<?= e($month) ?>">Cartellino PDF</a>
+</div>
 <div class="stats" style="margin-bottom:1rem">
   <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['worked_min'])) ?></span><span class="l">ore lavorate su <?= e(fmtMinutes((int)$t['expected_min'])) ?> previste</span></div>
   <div class="stat"><span class="n"><?= (int)$t['days_present'] ?>/<?= (int)$t['days_scheduled'] ?></span><span class="l">giorni presenti / previsti</span></div>

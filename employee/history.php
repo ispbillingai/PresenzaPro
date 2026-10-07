@@ -37,6 +37,7 @@ pageStart('Storico', $user);
     <strong><?= e(monthLabel($month)) ?></strong>
     <a class="btn btn-sm" href="?m=<?= e($next) ?>" <?= $next > date('Y-m') ? 'style="visibility:hidden"' : '' ?>>Mese succ. ›</a>
   </div>
+  <p style="margin:0 0 .75rem"><a class="btn btn-primary btn-block" href="/employee/timecard.php?m=<?= e($month) ?>">Scarica il cartellino di <?= e(monthLabel($month)) ?> (PDF)</a></p>
   <?php if ($t): ?>
   <div class="stats">
     <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['worked_min'])) ?></span><span class="l">ore lavorate<?= $t['expected_min'] ? ' su ' . e(fmtMinutes((int)$t['expected_min'])) . ' previste' : '' ?></span></div>
