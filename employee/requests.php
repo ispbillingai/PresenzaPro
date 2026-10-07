@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'new') {
-        $type = in_array($_POST['type'] ?? '', ['ferie', 'permesso', 'malattia', 'altro'], true) ? $_POST['type'] : '';
+        $type = in_array($_POST['type'] ?? '', array_keys(ABSENCE_LABELS), true) ? $_POST['type'] : '';
         $from = (string)($_POST['date_from'] ?? '');
         $to = (string)($_POST['date_to'] ?? '') ?: $from;
         $hours = trim((string)($_POST['hours'] ?? ''));
@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) || $to < $from) $errors[] = 'Date non valide.';
         if ($hours !== null && ($hours <= 0 || $hours > 24)) $errors[] = 'Le ore devono essere tra 0 e 24.';
         if ($hours !== null && $from !== $to) $errors[] = 'Un permesso a ore vale per un solo giorno.';
-        if ($type === 'permesso' && $hours === null && $from !== $to) $errors[] = 'Per più giorni usa Ferie.';
+        if (($type === 'permesso' || $type === 'permesso_servizio') && $hours === null && $from !== $to) $errors[] = 'Per più giorni usa Ferie.';
         if (!$errors) {
             $dup = fetchOne('SELECT id FROM leave_requests WHERE user_id = ? AND status = "pending" AND date_from <= ? AND date_to >= ?', [$uid, $to, $from]);
             if ($dup) $errors[] = 'Hai già una richiesta in attesa per quelle date.';
@@ -57,7 +57,7 @@ pageStart('Richieste', $user);
 <?php if ($bal): ?>
 <div class="stats" style="margin-bottom:1rem">
   <div class="stat"><span class="n"><?= e(fmtHoursDec($bal['leave_left'])) ?></span><span class="l">giorni di ferie residui <?= date('Y') ?><?= $bal['leave_planned'] ? ' (' . (int)$bal['leave_planned'] . ' pianificati)' : '' ?></span></div>
-  <div class="stat"><span class="n"><?= e(fmtMinutes(max(0, $bal['permit_left_min']))) ?></span><span class="l">permessi residui</span></div>
+  <div class="stat"><span class="n"><?= e(fmtMinutes(max(0, $bal['permit_left_min']))) ?></span><span class="l">permessi personali residui</span></div>
   <div class="stat"><span class="n"><?= $bal['bank_min'] < 0 ? '-' : '+' ?><?= e(fmtMinutes(abs($bal['bank_min']))) ?></span><span class="l">banca ore (lavorate meno previste)</span></div>
 </div>
 <?php endif; ?>
@@ -70,11 +70,11 @@ pageStart('Richieste', $user);
     <input type="hidden" name="action" value="new">
     <label>Tipo
       <select name="type" required>
-        <option value="ferie">Ferie</option>
-        <option value="permesso">Permesso</option>
-        <option value="malattia">Malattia</option>
-        <option value="altro">Altro</option>
+        <?php foreach (ABSENCE_LABELS as $k => $v): ?>
+          <option value="<?= e($k) ?>"><?= e($v) ?></option>
+        <?php endforeach; ?>
       </select>
+      <span class="help">Il permesso personale scala il tuo monte ore; il permesso per servizio (es. trasferta, commissione per l'azienda) giustifica le ore senza scalarle.</span>
     </label>
     <div class="inline-fields">
       <label>Dal <input type="date" name="date_from" required value="<?= e(date('Y-m-d')) ?>"></label>

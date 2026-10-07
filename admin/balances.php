@@ -42,7 +42,7 @@ pageStart('Saldi', $user);
     <thead><tr>
       <th>Dipendente</th>
       <th class="num">Ferie spett.</th><th class="num">Godute</th><th class="num">Pianific.</th><th class="num">Residue</th>
-      <th class="num">Permessi spett.</th><th class="num">Usati</th><th class="num">Residui</th>
+      <th class="num">Perm. pers. spett.</th><th class="num">Usati</th><th class="num">Residui</th>
       <th class="num">Banca ore</th><th class="num">Straord.</th><th class="num">Malattia</th><th class="num">Assenze</th><th></th>
     </tr></thead>
     <tbody>
@@ -66,6 +66,6 @@ pageStart('Saldi', $user);
     </tbody>
   </table>
   <?php endif; ?>
-  <p class="help" style="margin:.75rem 0 0">Ferie spettanti = giorni annui + residuo anno precedente (nella scheda del dipendente). Godute = giorni di ferie su giornate con turno fino a oggi; pianificate = approvate per date future. Banca ore = ore lavorate meno ore previste da inizio anno a oggi.</p>
+  <p class="help" style="margin:.75rem 0 0">Ferie spettanti = giorni annui + residuo anno precedente (nella scheda del dipendente). Godute = giorni di ferie su giornate con turno fino a oggi; pianificate = approvate per date future. Banca ore = ore lavorate meno ore previste da inizio anno a oggi. I permessi per servizio non scalano il monte ore permessi.</p>
 </div>
 <?php pageEnd(); ?>

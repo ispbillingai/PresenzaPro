@@ -1,7 +1,7 @@
 <?php
 /**
  * CSV export for the payroll consultant.
- *   ?m=YYYY-MM&layout=giornaliero  -> one row per employee / day / causale (ORD, STR, FER, PER, MAL, ALT, ASS, RIT)
+ *   ?m=YYYY-MM&layout=giornaliero  -> one row per employee / day / causale (ORD, STR, FER, PER, PSE, MAL, ALT, ASS, RIT)
  *   ?m=YYYY-MM&layout=totali       -> one row per employee with monthly totals per causale
  */
 declare(strict_types=1);
@@ -26,12 +26,12 @@ if ($layout === 'giornaliero') {
         fputcsv($out, $row, ';');
     }
 } else {
-    fputcsv($out, ['Dipendente', 'Matricola', 'Mese', 'Giorni previsti', 'Giorni presenti', 'ORD ore ordinarie', 'STR straordinario (h)', 'FER ferie (gg)', 'MAL malattia (gg)', 'PER permessi (h)', 'ALT altro (gg)', 'ASS assenze ingiustificate (gg)', 'RIT ritardi (n)', 'RIT ritardi (min)', 'Ore previste', 'Ore lavorate'], ';');
+    fputcsv($out, ['Dipendente', 'Matricola', 'Mese', 'Giorni previsti', 'Giorni presenti', 'ORD ore ordinarie', 'STR straordinario (h)', 'FER ferie (gg)', 'MAL malattia (gg)', 'PER permessi personali (h)', 'PSE permessi servizio (h)', 'ALT altro (gg)', 'ASS assenze ingiustificate (gg)', 'RIT ritardi (n)', 'RIT ritardi (min)', 'Ore previste', 'Ore lavorate'], ';');
     foreach ($report as $r) {
         $t = $r['totals'];
         fputcsv($out, [
             $r['user']['full_name'], $r['user']['username'], $month, $t['days_scheduled'], $t['days_present'],
-            $h($t['worked_min'] - $t['overtime_min']), $h($t['overtime_min']), $t['days_ferie'] + $t['days_ferie_future'], $t['days_malattia'], $h($t['permesso_min']),
+            $h($t['worked_min'] - $t['overtime_min']), $h($t['overtime_min']), $t['days_ferie'] + $t['days_ferie_future'], $t['days_malattia'], $h($t['permesso_min']), $h($t['servizio_min']),
             $t['days_altro'], $t['days_absent'], $t['late_count'], $t['late_min'], $h($t['planned_min']), $h($t['worked_min']),
         ], ';');
     }

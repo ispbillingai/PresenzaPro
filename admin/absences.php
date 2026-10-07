@@ -89,7 +89,7 @@ pageStart('Assenze e permessi', $user);
       <label>Ore <span class="help">(solo per permesso parziale)</span> <input type="text" name="hours" inputmode="decimal" placeholder="es. 2"></label>
     </div>
     <label>Nota <input type="text" name="note" maxlength="255"></label>
-    <p class="help">Senza ore il giustificativo copre l'intera giornata (nessuna ora prevista). Con le ore riduce le ore previste di quel giorno.</p>
+    <p class="help">Senza ore il giustificativo copre l'intera giornata (nessuna ora prevista). Con le ore riduce le ore previste di quel giorno. Il permesso personale scala il monte ore permessi del dipendente; il permesso per servizio no.</p>
     <div class="actions">
       <button class="btn btn-primary" type="submit">Salva</button>
       <a class="btn" href="/admin/absences.php?m=<?= e($month) ?>">Annulla</a>

@@ -32,7 +32,8 @@ Il link personale `/t.php?k=<token>` fa entrare il dipendente senza password (to
 - **Saldi** (`admin/balances.php`): ferie spettanti/godute/pianificate/residue, permessi, banca ore
   (lavorate meno previste da inizio anno), straordinari. Spettanze nella scheda del dipendente.
 - **Export paghe** (`admin/export-payroll.php`): CSV giornaliero per causale (ORD, STR, FER, PER, MAL,
-  ALT, ASS, RIT) o totali mensili per dipendente.
+  PSE, ALT, ASS, RIT) o totali mensili per dipendente. `permesso` = personale (scala il monte ore
+  permessi), `permesso_servizio` = per servizio (giustifica le ore, non scala nulla).
 - **Pausa timbrata**: fascia con `break_mode = clocked` → il dipendente timbra inizio/fine pausa
   (tipi `break_start`/`break_end`), le ore lavorate escludono la pausa reale.
 - **Pianificazione per data** (`admin/schedule.php`): eccezioni all'orario settimanale (turno diverso o

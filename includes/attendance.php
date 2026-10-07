@@ -8,7 +8,8 @@ require_once __DIR__ . '/clocking.php';
 
 const ABSENCE_LABELS = [
     'ferie' => 'Ferie',
-    'permesso' => 'Permesso',
+    'permesso' => 'Permesso personale',
+    'permesso_servizio' => 'Permesso per servizio',
     'malattia' => 'Malattia',
     'altro' => 'Altro',
 ];
@@ -18,6 +19,7 @@ const DAY_STATUS_LABELS = [
     'absent' => 'Assente',
     'ferie' => 'Ferie',
     'permesso' => 'Permesso',
+    'permesso_servizio' => 'Permesso servizio',
     'malattia' => 'Malattia',
     'altro' => 'Giustificato',
     'rest' => 'Riposo',
@@ -229,7 +231,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
         $days = [];
         $t = [
             'worked_min' => 0, 'expected_min' => 0, 'planned_min' => 0, 'days_present' => 0, 'days_absent' => 0,
-            'days_ferie' => 0, 'days_ferie_future' => 0, 'days_malattia' => 0, 'days_altro' => 0, 'permesso_min' => 0,
+            'days_ferie' => 0, 'days_ferie_future' => 0, 'days_malattia' => 0, 'days_altro' => 0, 'permesso_min' => 0, 'servizio_min' => 0,
             'late_count' => 0, 'late_min' => 0, 'early_count' => 0, 'early_min' => 0,
             'overtime_min' => 0, 'open_count' => 0, 'days_scheduled' => 0, 'break_min' => 0,
         ];
@@ -310,7 +312,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
                 $day['flags'][] = 'uscita mancante';
             }
             if ($ab && $ab['hours'] !== null) {
-                $day['flags'][] = 'permesso ' . fmtHoursDec((float)$ab['hours']) . ' h';
+                $day['flags'][] = mb_strtolower(absenceLabel($ab['type'])) . ' ' . fmtHoursDec((float)$ab['hours']) . ' h';
             }
             if ($override) {
                 $day['flags'][] = $override['shift'] ? 'turno modificato' : 'riposo pianificato';
@@ -334,8 +336,9 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             if ($day['status'] === 'ferie') { $d > $today ? $t['days_ferie_future']++ : $t['days_ferie']++; }
             if ($day['status'] === 'malattia') $t['days_malattia']++;
             if ($day['status'] === 'altro') $t['days_altro']++;
-            if ($ab && $ab['type'] === 'permesso' && $scheduled) {
-                $t['permesso_min'] += $ab['hours'] !== null ? (int)round((float)$ab['hours'] * 60) : shiftMinutes($shift);
+            if ($ab && ($ab['type'] === 'permesso' || $ab['type'] === 'permesso_servizio') && $scheduled) {
+                $mins = $ab['hours'] !== null ? (int)round((float)$ab['hours'] * 60) : shiftMinutes($shift);
+                $t[$ab['type'] === 'permesso' ? 'permesso_min' : 'servizio_min'] += $mins;
             }
 
             $days[$d] = $day;
@@ -393,7 +396,7 @@ function dayStatusBadge(array $day): string
 {
     $map = [
         'present' => 'badge-ok', 'extra' => 'badge-ok', 'absent' => 'badge-rej', 'ferie' => 'badge-info',
-        'permesso' => 'badge-info', 'malattia' => 'badge-warn', 'altro' => 'badge-info',
+        'permesso' => 'badge-info', 'permesso_servizio' => 'badge-info', 'malattia' => 'badge-warn', 'altro' => 'badge-info',
         'rest' => 'badge-off', 'holiday' => 'badge-off', 'future' => 'badge-off',
     ];
     $label = DAY_STATUS_LABELS[$day['status']] ?? $day['status'];
@@ -422,7 +425,7 @@ function payrollRows(array $report): array
             }
             $ab = $d['absence'];
             if ($ab) {
-                $code = ['ferie' => 'FER', 'permesso' => 'PER', 'malattia' => 'MAL', 'altro' => 'ALT'][$ab['type']];
+                $code = ['ferie' => 'FER', 'permesso' => 'PER', 'permesso_servizio' => 'PSE', 'malattia' => 'MAL', 'altro' => 'ALT'][$ab['type']];
                 $h = $ab['hours'] !== null ? (float)$ab['hours'] : ($d['shift'] && !$d['holiday'] ? $expectedShift / 60 : 0);
                 if ($h > 0) $rows[] = [...$base, $code, absenceLabel($ab['type']), number_format($h, 2, ',', ''), (string)($ab['note'] ?? '')];
             }

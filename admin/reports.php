@@ -31,12 +31,12 @@ if (($_GET['export'] ?? '') === 'csv') {
         }
     } else {
         header('Content-Disposition: attachment; filename="riepilogo_' . $month . '.csv"');
-        fputcsv($out, ['Dipendente', 'Giorni previsti', 'Giorni presenti', 'Assenze ingiustificate', 'Ferie (gg)', 'Malattia (gg)', 'Permessi (ore)', 'Ore previste', 'Ore lavorate', 'Differenza', 'Straordinario (ore)', 'Ritardi (n)', 'Ritardi (min)', 'Uscite anticipate (n)', 'Uscite mancanti'], ';');
+        fputcsv($out, ['Dipendente', 'Giorni previsti', 'Giorni presenti', 'Assenze ingiustificate', 'Ferie (gg)', 'Malattia (gg)', 'Permessi personali (ore)', 'Permessi servizio (ore)', 'Ore previste', 'Ore lavorate', 'Differenza', 'Straordinario (ore)', 'Ritardi (n)', 'Ritardi (min)', 'Uscite anticipate (n)', 'Uscite mancanti'], ';');
         foreach ($report as $r) {
             $t = $r['totals'];
             fputcsv($out, [
                 $r['user']['full_name'], $t['days_scheduled'], $t['days_present'], $t['days_absent'], $t['days_ferie'], $t['days_malattia'],
-                $h($t['permesso_min']), $h($t['expected_min']), $h($t['worked_min']), $h($t['worked_min'] - $t['expected_min']),
+                $h($t['permesso_min']), $h($t['servizio_min']), $h($t['expected_min']), $h($t['worked_min']), $h($t['worked_min'] - $t['expected_min']),
                 $h($t['overtime_min']), $t['late_count'], $t['late_min'], $t['early_count'], $t['open_count'],
             ], ';');
         }
@@ -81,7 +81,7 @@ pageStart('Riepilogo mensile', $user);
   <table>
     <thead><tr>
       <th>Dipendente</th><th class="num">Giorni prev.</th><th class="num">Presenze</th><th class="num">Assenze</th>
-      <th class="num">Ferie</th><th class="num">Malattia</th><th class="num">Permessi</th>
+      <th class="num">Ferie</th><th class="num">Malattia</th><th class="num">Permessi</th><th class="num">Perm. servizio</th>
       <th class="num">Ore previste</th><th class="num">Ore lavorate</th><th class="num">Differenza</th><th class="num">Straord.</th>
       <th class="num">Ritardi</th><th class="num">Usc. antic.</th><th class="num">Anomalie</th><th></th>
     </tr></thead>
@@ -95,6 +95,7 @@ pageStart('Riepilogo mensile', $user);
         <td class="num"><?= (int)$t['days_ferie'] ?></td>
         <td class="num"><?= (int)$t['days_malattia'] ?></td>
         <td class="num"><?= e(fmtMinutes((int)$t['permesso_min'])) ?></td>
+        <td class="num"><?= e(fmtMinutes((int)$t['servizio_min'])) ?></td>
         <td class="num"><?= e(fmtMinutes((int)$t['expected_min'])) ?></td>
         <td class="num"><strong><?= e(fmtMinutes((int)$t['worked_min'])) ?></strong></td>
         <td class="num" style="color:<?= $diff < 0 ? 'var(--err)' : 'var(--ok)' ?>"><?= $diff < 0 ? '-' : '+' ?><?= e(fmtMinutes(abs($diff))) ?></td>
@@ -108,7 +109,7 @@ pageStart('Riepilogo mensile', $user);
     </tbody>
   </table>
   <?php endif; ?>
-  <p class="help" style="margin:.75rem 0 0">Giorni previsti = giorni con fascia oraria, esclusi i festivi. Ore previste = fino a oggi (i giorni futuri non contano). Assenze = giorni previsti senza timbrature né giustificativo. Anomalie = entrate senza uscita. Le esportazioni "Paghe" usano le causali ORD, STR, FER, PER, MAL, ALT, ASS, RIT.</p>
+  <p class="help" style="margin:.75rem 0 0">Giorni previsti = giorni con fascia oraria, esclusi i festivi. Ore previste = fino a oggi (i giorni futuri non contano). Assenze = giorni previsti senza timbrature né giustificativo. Anomalie = entrate senza uscita. Le esportazioni "Paghe" usano le causali ORD, STR, FER, PER (permesso personale), PSE (permesso per servizio), MAL, ALT, ASS, RIT. Solo i permessi personali scalano il monte ore permessi.</p>
 </div>
 
 <?php elseif (isset($report[$uid])): $r = $report[$uid]; $t = $r['totals']; ?>
@@ -118,7 +119,8 @@ pageStart('Riepilogo mensile', $user);
   <div class="stat"><span class="n"><?= (int)$t['days_present'] ?>/<?= (int)$t['days_scheduled'] ?></span><span class="l">giorni presenti / previsti</span></div>
   <div class="stat"><span class="n"><?= (int)$t['days_absent'] ?></span><span class="l">assenze ingiustificate</span></div>
   <div class="stat"><span class="n"><?= (int)$t['days_ferie'] ?> / <?= (int)$t['days_malattia'] ?></span><span class="l">ferie / malattia (gg)</span></div>
-  <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['permesso_min'])) ?></span><span class="l">permessi</span></div>
+  <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['permesso_min'])) ?></span><span class="l">permessi personali</span></div>
+  <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['servizio_min'])) ?></span><span class="l">permessi per servizio</span></div>
   <div class="stat"><span class="n"><?= e(fmtMinutes((int)$t['overtime_min'])) ?></span><span class="l">straordinario</span></div>
   <div class="stat"><span class="n"><?= (int)$t['late_count'] ?></span><span class="l">ritardi (<?= (int)$t['late_min'] ?> min)</span></div>
   <div class="stat"><span class="n"><?= (int)$t['early_count'] ?></span><span class="l">uscite anticipate</span></div>
