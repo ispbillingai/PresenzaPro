@@ -34,6 +34,13 @@ h1:first-child, h2:first-child { margin-top: 0; }
 .nav a { color: #dbe7f3; text-decoration: none; padding: .4rem .7rem; border-radius: 8px; font-size: .95rem; }
 .nav a.active, .nav a:hover { background: rgba(255,255,255,.16); color: #fff; }
 .nav-logout { margin-left: .5rem; }
+.nav-badge { display: inline-block; background: #ffb300; color: #1c2430; border-radius: 999px; padding: 0 .45rem; font-size: .75rem; font-weight: 700; }
+.plan-grid th, .plan-grid td { padding: .3rem .25rem; text-align: center; font-size: .78rem; }
+.plan-grid th:first-child, .plan-grid td:first-child { text-align: left; }
+.plan-grid .we { background: #f0f2f5; }
+.plan-grid .ov { background: #fff3cd; font-weight: 700; }
+.btn-clock.secondary { background: var(--warn); font-size: 1.05rem; padding: .8rem 1rem; margin-top: .6rem; }
+.btn-clock.break_end { background: var(--brand); }
 
 .container { max-width: 1080px; margin: 0 auto; padding: 1rem; width: 100%; flex: 1; }
 .footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 1rem; }

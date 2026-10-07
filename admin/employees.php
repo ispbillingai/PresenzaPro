@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim((string)($_POST['phone'] ?? '')) ?: null;
         $locIds = array_map('intval', (array)($_POST['locations'] ?? []));
         $schedule = (array)($_POST['shift'] ?? []);
+        $leaveDays = (float)str_replace(',', '.', (string)($_POST['annual_leave_days'] ?? '0'));
+        $carry = (float)str_replace(',', '.', (string)($_POST['leave_carryover_days'] ?? '0'));
+        $permitHours = (float)str_replace(',', '.', (string)($_POST['annual_permit_hours'] ?? '0'));
 
         $errors = [];
         if ($fullName === '') $errors[] = 'Il nome è obbligatorio.';
@@ -55,13 +58,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
         $pdo->beginTransaction();
         if ($id > 0) {
-            q('UPDATE users SET full_name = ?, username = ?, email = ?, phone = ? WHERE id = ? AND role = "employee"', [$fullName, $username, $email, $phone, $id]);
+            q('UPDATE users SET full_name = ?, username = ?, email = ?, phone = ?, annual_leave_days = ?, leave_carryover_days = ?, annual_permit_hours = ? WHERE id = ? AND role = "employee"',
+                [$fullName, $username, $email, $phone, $leaveDays, $carry, $permitHours, $id]);
             if ($password !== '') {
                 q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $id]);
             }
         } else {
-            q('INSERT INTO users (role, username, password_hash, full_name, email, phone) VALUES ("employee", ?, ?, ?, ?, ?)',
-                [$username, password_hash($password, PASSWORD_DEFAULT), $fullName, $email, $phone]);
+            q('INSERT INTO users (role, username, password_hash, full_name, email, phone, annual_leave_days, leave_carryover_days, annual_permit_hours) VALUES ("employee", ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$username, password_hash($password, PASSWORD_DEFAULT), $fullName, $email, $phone, $leaveDays, $carry, $permitHours]);
             $id = (int)$pdo->lastInsertId();
         }
         q('DELETE FROM user_locations WHERE user_id = ?', [$id]);
@@ -168,6 +172,14 @@ pageStart('Dipendenti', $user);
       <?php endforeach; ?>
     </div>
 
+    <h2 id="leave">Spettanze annue</h2>
+    <p class="help" style="margin:0 0 .4rem">Usate per i saldi ferie e permessi. Ferie in giorni, permessi in ore (es. ROL/ex festività).</p>
+    <div class="inline-fields">
+      <label>Ferie annue (giorni) <input type="text" name="annual_leave_days" inputmode="decimal" value="<?= e(fmtHoursDec((float)($editing['annual_leave_days'] ?? 0))) ?>"></label>
+      <label>Residuo ferie anno precedente (giorni) <input type="text" name="leave_carryover_days" inputmode="decimal" value="<?= e(fmtHoursDec((float)($editing['leave_carryover_days'] ?? 0))) ?>"></label>
+      <label>Permessi annui (ore) <input type="text" name="annual_permit_hours" inputmode="decimal" value="<?= e(fmtHoursDec((float)($editing['annual_permit_hours'] ?? 0))) ?>"></label>
+    </div>
+
     <div class="actions">
       <button class="btn btn-primary" type="submit">Salva</button>
       <a class="btn" href="/admin/employees.php">Annulla</a>
@@ -215,12 +227,12 @@ pageStart('Dipendenti', $user);
   <table>
     <thead><tr><th>Nome</th><th>Utente</th><th>Sedi</th><th>Orario</th><th>Link</th><th>Stato</th><th>Ultimo accesso</th><th></th></tr></thead>
     <tbody>
-    <?php foreach ($employees as $emp): $l = $lastMap[(int)$emp['id']] ?? null; $in = $l && $l['type'] === 'in' && substr($l['clocked_at'], 0, 10) === date('Y-m-d'); ?>
+    <?php foreach ($employees as $emp): $l = $lastMap[(int)$emp['id']] ?? null; $in = $l && $l['type'] !== 'out' && substr($l['clocked_at'], 0, 10) === date('Y-m-d'); ?>
       <tr class="<?= (int)$emp['is_active'] ? '' : 'muted' ?>">
         <td><?= e($emp['full_name']) ?><br><span class="help"><?= e($emp['phone'] ?? '') ?></span></td>
         <td><?= e($emp['username']) ?></td>
         <td><?= e($emp['location_names'] ?? '') ?: '<span class="badge badge-warn">nessuna</span>' ?></td>
-        <td><?= (int)$emp['n_shift_days'] ? (int)$emp['n_shift_days'] . ' gg/sett.' : '<span class="badge badge-warn">nessuno</span>' ?></td>
+        <td><?= (int)$emp['n_shift_days'] ? (int)$emp['n_shift_days'] . ' gg/sett.' : '<span class="badge badge-warn">nessuno</span>' ?> <a class="help" href="/admin/schedule.php?user=<?= (int)$emp['id'] ?>">pianifica</a></td>
         <td><?= $emp['login_token'] ? '<span class="badge badge-ok">attivo</span>' : '<span class="help">no</span>' ?></td>
         <td>
           <?php if (!(int)$emp['is_active']): ?><span class="badge badge-off">disattivato</span>

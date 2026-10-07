@@ -3,17 +3,18 @@
   var root = document.getElementById('clock');
   if (!root) return;
 
-  var btn = document.getElementById('btn-clock');
+  var buttonsBox = document.getElementById('clock-buttons');
   var geoBox = document.getElementById('geo-status');
   var resultBox = document.getElementById('result');
   var stateBox = document.getElementById('clock-state');
   var list = document.getElementById('today-list');
   var timeEl = document.getElementById('clock-time');
 
-  var nextType = root.dataset.next;
   var csrf = root.dataset.csrf;
   var maxAccuracy = parseFloat(root.dataset.maxAccuracy || '150');
-  var locations = [];
+  var allowed = [], labels = {}, locations = [];
+  try { allowed = JSON.parse(root.dataset.allowed || '["in"]'); } catch (e) { allowed = ['in']; }
+  try { labels = JSON.parse(root.dataset.labels || '{}'); } catch (e) {}
   try { locations = JSON.parse(root.dataset.locations || '[]'); } catch (e) {}
 
   var fix = null;      // last position
@@ -51,10 +52,23 @@
     geoBox.querySelector('small').textContent = detail || '';
   }
 
-  function updateButton() {
-    btn.className = 'btn-clock ' + nextType;
-    btn.textContent = nextType === 'in' ? 'Timbra ENTRATA' : 'Timbra USCITA';
-    btn.disabled = sending || !fix || locations.length === 0;
+  function renderButtons() {
+    buttonsBox.innerHTML = '';
+    allowed.forEach(function (t, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn-clock ' + t + (i > 0 ? ' secondary' : '');
+      b.dataset.type = t;
+      b.textContent = i === 0 ? 'Timbra ' + (labels[t] || t).toUpperCase() : (labels[t] || t);
+      b.disabled = sending || !fix || locations.length === 0;
+      b.addEventListener('click', function () { send(t); });
+      buttonsBox.appendChild(b);
+    });
+  }
+
+  function updateButtons() {
+    var dis = sending || !fix || locations.length === 0;
+    Array.prototype.forEach.call(buttonsBox.querySelectorAll('button'), function (b) { b.disabled = dis; });
   }
 
   function onPosition(pos) {
@@ -70,18 +84,19 @@
     } else {
       var n = nearest(fix.lat, fix.lng);
       var d = Math.round(n.dist);
+      var src = acc <= 20 ? 'GPS' : (acc <= 100 ? 'Wi-Fi/GPS' : 'rete');
       if (n.inside) {
-        setGeo('inside', 'Sei presso ' + n.loc.name, 'Distanza ' + d + ' m · precisione ±' + acc + ' m');
+        setGeo('inside', 'Sei presso ' + n.loc.name, 'Distanza ' + d + ' m · precisione ±' + acc + ' m (' + src + ')');
       } else {
         setGeo('outside', 'Fuori sede: ' + d + ' m da ' + n.loc.name,
-          'Raggio consentito ' + n.loc.radius + ' m · precisione ±' + acc + ' m');
+          'Raggio consentito ' + n.loc.radius + ' m · precisione ±' + acc + ' m (' + src + ')');
       }
       if (fix.accuracy > maxAccuracy) {
         setGeo('waiting', 'Precisione GPS bassa (±' + acc + ' m)',
           'Serve almeno ±' + Math.round(maxAccuracy) + ' m. Attiva il GPS e spostati all\'aperto.');
       }
     }
-    updateButton();
+    updateButtons();
   }
 
   function onError(err) {
@@ -91,7 +106,7 @@
     else if (err && err.code === 2) msg = 'Posizione non disponibile. Attiva il GPS.';
     else if (err && err.code === 3) msg = 'Timeout nel rilevamento della posizione. Riprovo…';
     setGeo('outside', 'Posizione non disponibile', msg);
-    updateButton();
+    updateButtons();
   }
 
   function startWatch() {
@@ -121,7 +136,7 @@
     var li = document.createElement('li');
     var t = r.clocked_at.substr(11, 5);
     var left = document.createElement('span');
-    left.textContent = t + ' · ' + (r.type === 'in' ? 'Entrata' : 'Uscita') + (r.location ? ' · ' + r.location : '');
+    left.textContent = t + ' · ' + (r.type_label || r.type) + (r.location ? ' · ' + r.location : '');
     var badge = document.createElement('span');
     badge.className = 'badge ' + (r.ok ? 'badge-ok' : 'badge-rej');
     badge.textContent = r.ok ? 'OK' : 'Rifiutata';
@@ -130,22 +145,16 @@
     list.insertBefore(li, list.firstChild);
   }
 
-  btn.addEventListener('click', function () {
+  function send(type) {
     if (!fix || sending) return;
     sending = true;
-    updateButton();
+    updateButtons();
     resultBox.innerHTML = '';
     fetch('/api/clock.php', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-      body: JSON.stringify({
-        type: nextType,
-        lat: fix.lat,
-        lng: fix.lng,
-        accuracy: fix.accuracy,
-        fix_ts: fix.ts
-      })
+      body: JSON.stringify({ type: type, lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, fix_ts: fix.ts })
     }).then(function (res) {
       return res.json().then(function (data) { return { status: res.status, data: data }; });
     }).then(function (r) {
@@ -154,23 +163,22 @@
       if (d.error && d.ok === undefined) { showResult(false, d.error); return; }
       showResult(!!d.ok, d.message || (d.ok ? 'Registrata.' : 'Rifiutata.'));
       if (d.clocked_at) prependToday(d);
-      if (d.next_type) nextType = d.next_type;
+      if (d.allowed && d.allowed.length) { allowed = d.allowed; renderButtons(); }
       if (d.ok) {
-        if (d.type === 'in') {
-          stateBox.innerHTML = '<span class="badge badge-in">In servizio</span> dalle ' + d.clocked_at.substr(11, 5);
-        } else {
-          stateBox.innerHTML = '<span class="badge badge-out">Non in servizio</span>';
-        }
+        var hm = d.clocked_at.substr(11, 5);
+        if (d.type === 'out') stateBox.innerHTML = '<span class="badge badge-out">Non in servizio</span>';
+        else if (d.type === 'break_start') stateBox.innerHTML = '<span class="badge badge-warn">In pausa</span> dalle ' + hm;
+        else stateBox.innerHTML = '<span class="badge badge-in">In servizio</span>';
         if (navigator.vibrate) navigator.vibrate(80);
       }
     }).catch(function () {
       showResult(false, 'Errore di rete. Controlla la connessione e riprova.');
     }).then(function () {
       sending = false;
-      updateButton();
+      updateButtons();
     });
-  });
+  }
 
-  updateButton();
+  renderButtons();
   startWatch();
 })();

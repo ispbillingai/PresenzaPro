@@ -71,6 +71,7 @@ if ($report) {
     <span>
       <?= dayStatusBadge($d) ?>
       <?php if ($d['worked_min']): ?><span class="badge badge-ok"><?= e(fmtMinutes((int)$d['worked_min'])) ?></span><?php endif; ?>
+      <?php if ($d['break_min']): ?><span class="badge badge-off">pausa <?= (int)$d['break_min'] ?> min</span><?php endif; ?>
       <?php foreach ($d['flags'] as $f): ?><span class="badge <?= str_starts_with($f, 'straord') ? 'badge-ok' : 'badge-warn' ?>"><?= e($f) ?></span><?php endforeach; ?>
     </span>
   </h2>
@@ -78,7 +79,7 @@ if ($report) {
   <ul class="today-list">
     <?php foreach ($items as $c): ?>
       <li>
-        <span><?= e(fmtDate($c['clocked_at'], 'H:i')) ?> · <?= $c['type'] === 'in' ? 'Entrata' : 'Uscita' ?><?= $c['location_name'] ? ' · ' . e($c['location_name']) : '' ?><?= $c['source'] === 'manual' ? ' · <span class="help">manuale</span>' : '' ?></span>
+        <span><?= e(fmtDate($c['clocked_at'], 'H:i')) ?> · <?= e(clockTypeLabel($c['type'])) ?><?= $c['location_name'] ? ' · ' . e($c['location_name']) : '' ?><?= $c['source'] === 'manual' ? ' · <span class="help">manuale</span>' : '' ?></span>
         <?php if ($c['status'] === 'accepted'): ?>
           <span class="badge badge-ok">OK</span>
         <?php else: ?>

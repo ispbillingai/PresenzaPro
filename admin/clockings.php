@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'manual') {
         $uid = (int)($_POST['user_id'] ?? 0);
-        $type = ($_POST['type'] ?? '') === 'out' ? 'out' : 'in';
+        $type = isset(CLOCK_TYPE_LABELS[$_POST['type'] ?? '']) ? (string)$_POST['type'] : 'in';
         $date = (string)($_POST['date'] ?? '');
         $time = (string)($_POST['time'] ?? '');
         $note = trim((string)($_POST['note'] ?? ''));
@@ -76,7 +76,7 @@ if (($_GET['export'] ?? '') === 'csv') {
     foreach (array_reverse($rows) as $r) {
         fputcsv($out, [
             fmtDate($r['clocked_at'], 'd/m/Y'), fmtDate($r['clocked_at'], 'H:i:s'), $r['full_name'], $r['username'],
-            $r['type'] === 'in' ? 'Entrata' : 'Uscita', ['accepted' => 'Accettata', 'rejected' => 'Rifiutata', 'voided' => 'Annullata'][$r['status']],
+            clockTypeLabel($r['type']), ['accepted' => 'Accettata', 'rejected' => 'Rifiutata', 'voided' => 'Annullata'][$r['status']],
             rejectLabel($r['reject_reason']), $r['source'] === 'manual' ? 'Manuale' : 'GPS', $r['location_name'] ?? '', $r['distance_m'] ?? '', $r['accuracy_m'] ?? '',
             $r['latitude'] ?? '', $r['longitude'] ?? '', $r['ip'] ?? '', $r['note'] ?? '',
         ], ';');
@@ -114,6 +114,8 @@ pageStart('Timbrature', $user);
         <select name="type">
           <option value="in">Entrata</option>
           <option value="out" <?= ($_GET['type'] ?? '') === 'out' ? 'selected' : '' ?>>Uscita</option>
+          <option value="break_start">Inizio pausa</option>
+          <option value="break_end">Fine pausa</option>
         </select>
       </label>
       <label>Data <input type="date" name="date" required value="<?= e(preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date'] ?? '')) ? $_GET['date'] : date('Y-m-d')) ?>"></label>
@@ -163,7 +165,7 @@ pageStart('Timbrature', $user);
       <tr class="<?= $r['status'] === 'voided' ? 'muted' : '' ?>">
         <td style="white-space:nowrap"><?= e(fmtDate($r['clocked_at'], 'd/m/Y H:i:s')) ?></td>
         <td><?= e($r['full_name']) ?></td>
-        <td><span class="badge <?= $r['type'] === 'in' ? 'badge-in' : 'badge-out' ?>"><?= $r['type'] === 'in' ? 'Entrata' : 'Uscita' ?></span></td>
+        <td><span class="badge <?= $r['type'] === 'in' ? 'badge-in' : ($r['type'] === 'out' ? 'badge-out' : 'badge-off') ?>"><?= e(clockTypeLabel($r['type'])) ?></span></td>
         <td>
           <?php if ($r['status'] === 'accepted'): ?><span class="badge badge-ok">Accettata</span>
           <?php elseif ($r['status'] === 'voided'): ?><span class="badge badge-off">Annullata</span>

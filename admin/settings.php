@@ -25,6 +25,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/admin/settings.php');
     }
 
+    if ($action === 'alerts') {
+        setSetting('alerts_enabled', !empty($_POST['alerts_enabled']) ? '1' : '0');
+        setSetting('alert_email', trim((string)($_POST['alert_email'] ?? '')));
+        setSetting('alert_phone', trim((string)($_POST['alert_phone'] ?? '')));
+        $key = trim((string)($_POST['textmebot_api_key'] ?? ''));
+        if ($key !== '********') {
+            setSetting('textmebot_api_key', $key);
+        }
+        setSetting('late_alert_minutes', (string)max(1, min(240, (int)($_POST['late_alert_minutes'] ?? 15))));
+        setSetting('missing_out_alert_minutes', (string)max(1, min(600, (int)($_POST['missing_out_alert_minutes'] ?? 60))));
+        if (!empty($_POST['test'])) {
+            require_once dirname(__DIR__) . '/includes/notify.php';
+            $sent = notifyAdmin('Test avvisi ' . (setting('company_name', APP_NAME) ?: APP_NAME), 'Questo è un messaggio di prova dagli avvisi di PresenzaPro.');
+            flash($sent ? 'ok' : 'error', $sent ? 'Messaggio di prova inviato via ' . implode(' e ', $sent) . '.' : 'Nessun canale ha funzionato: controlla email, numero e chiave API.');
+            redirect('/admin/settings.php#alerts');
+        }
+        flash('ok', 'Impostazioni salvate.');
+        redirect('/admin/settings.php');
+    }
+
     if ($action === 'holiday_add') {
         $date = (string)($_POST['date'] ?? '');
         $name = trim((string)($_POST['name'] ?? ''));
@@ -101,6 +121,29 @@ pageStart('Impostazioni', $user);
       <button class="btn btn-primary" type="submit">Aggiorna password</button>
     </form>
     <p class="help" style="margin-top:1rem">Accesso come <strong><?= e($user['full_name']) ?></strong> (<?= e($user['username']) ?>).</p>
+  </div>
+
+  <div class="card" id="alerts">
+    <h2>Avvisi all'amministratore</h2>
+    <p class="help" style="margin:0 0 .5rem">Un controllo automatico ogni 5 minuti segnala chi non ha timbrato l'entrata e chi risulta ancora in servizio dopo la fine del turno. Gli avvisi compaiono nel Riepilogo e vengono inviati ai contatti qui sotto.</p>
+    <form method="post">
+      <?= csrfField() ?>
+      <input type="hidden" name="action" value="alerts">
+      <label class="checks"><input type="checkbox" name="alerts_enabled" value="1" <?= (setting('alerts_enabled', '1') ?: '1') === '1' ? 'checked' : '' ?>> Avvisi attivi</label>
+      <div class="inline-fields">
+        <label>Mancata entrata dopo (min) <input type="number" name="late_alert_minutes" min="1" max="240" value="<?= e(setting('late_alert_minutes', '15')) ?>"></label>
+        <label>Uscita mancante dopo fine turno (min) <input type="number" name="missing_out_alert_minutes" min="1" max="600" value="<?= e(setting('missing_out_alert_minutes', '60')) ?>"></label>
+      </div>
+      <label>Email di destinazione <input type="email" name="alert_email" value="<?= e(setting('alert_email', '')) ?>" placeholder="titolare@azienda.it"></label>
+      <label>Numero WhatsApp di destinazione <input type="tel" name="alert_phone" value="<?= e(setting('alert_phone', '')) ?>" placeholder="es. 3331234567"></label>
+      <label>Chiave API TextMeBot (per WhatsApp) <input type="text" name="textmebot_api_key" value="<?= setting('textmebot_api_key', '') ? '********' : '' ?>" autocomplete="off">
+        <span class="help">Servizio esterno textmebot.com: collega un numero WhatsApp aziendale e ottieni la chiave. Lascia il campo vuoto per rimuoverla.</span>
+      </label>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Salva</button>
+        <button class="btn" type="submit" name="test" value="1">Salva e invia prova</button>
+      </div>
+    </form>
   </div>
 
   <div class="card" id="holidays">

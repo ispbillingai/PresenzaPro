@@ -1,8 +1,10 @@
 <?php
 /**
- * Shared clocking logic (employee page + API).
+ * Shared clocking logic (employee page + API + reports).
  */
 declare(strict_types=1);
+
+require_once __DIR__ . '/attendance.php';
 
 const REJECT_LABELS = [
     'no_assignment' => 'Nessuna sede assegnata',
@@ -10,12 +12,24 @@ const REJECT_LABELS = [
     'low_accuracy' => 'Precisione GPS insufficiente',
     'stale_fix' => 'Posizione non aggiornata',
     'outside' => 'Fuori dalla sede',
-    'sequence' => 'Sequenza entrata/uscita errata',
+    'sequence' => 'Sequenza timbrature errata',
+];
+
+const CLOCK_TYPE_LABELS = [
+    'in' => 'Entrata',
+    'out' => 'Uscita',
+    'break_start' => 'Inizio pausa',
+    'break_end' => 'Fine pausa',
 ];
 
 function rejectLabel(?string $reason): string
 {
     return $reason ? (REJECT_LABELS[$reason] ?? $reason) : '';
+}
+
+function clockTypeLabel(?string $t): string
+{
+    return $t ? (CLOCK_TYPE_LABELS[$t] ?? $t) : '';
 }
 
 /** Active locations assigned to the user. */
@@ -39,32 +53,55 @@ function lastAccepted(int $userId): ?array
     );
 }
 
-/** Which type the user should clock next: "in" or "out". */
-function nextClockType(?array $last): string
+/** Which clocking types the user may send next, given the last accepted one. First = primary. */
+function allowedNextTypes(?array $last, bool $breakEnabled): array
 {
-    return ($last && $last['type'] === 'in') ? 'out' : 'in';
+    $lastType = $last['type'] ?? null;
+    if ($last && substr($last['clocked_at'], 0, 10) !== date('Y-m-d') && $lastType !== 'in' && $lastType !== 'break_start' && $lastType !== 'break_end') {
+        $lastType = null;
+    }
+    if ($lastType === null || $lastType === 'out') {
+        return ['in'];
+    }
+    if ($lastType === 'break_start') {
+        return ['break_end'];
+    }
+    return $breakEnabled ? ['out', 'break_start'] : ['out'];
 }
 
-/** Is the user currently "in" (last accepted clocking today is an entry)? */
+/** Primary next type ("in" or "out"), kept for compatibility. */
+function nextClockType(?array $last): string
+{
+    return allowedNextTypes($last, false)[0];
+}
+
+/** Is the user currently in (last accepted clocking today is not an exit)? */
 function isPresentNow(?array $last): bool
 {
-    return $last && $last['type'] === 'in' && substr($last['clocked_at'], 0, 10) === date('Y-m-d');
+    return $last && $last['type'] !== 'out' && substr($last['clocked_at'], 0, 10) === date('Y-m-d');
+}
+
+function isOnBreak(?array $last): bool
+{
+    return $last && $last['type'] === 'break_start' && substr($last['clocked_at'], 0, 10) === date('Y-m-d');
 }
 
 /**
- * Validate and record a clock-in/out attempt. Returns the inserted row data with
- * 'ok' => bool and 'message'. Every attempt is stored, accepted or rejected.
+ * Validate and record a clock attempt. Every attempt is stored, accepted or rejected.
  */
 function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?float $accuracy, ?int $fixTs, ?string $note = null): array
 {
     $userId = (int)$user['id'];
-    $type = $type === 'out' ? 'out' : 'in';
+    if (!isset(CLOCK_TYPE_LABELS[$type])) {
+        $type = 'in';
+    }
     $maxAcc = (float)(setting('max_accuracy_m', '150') ?: 150);
     $maxAge = (int)(setting('max_fix_age_s', '120') ?: 120);
 
     $locations = userLocations($userId);
     $last = lastAccepted($userId);
-    $expected = nextClockType($last);
+    $breakEnabled = breakClockingEnabled($userId);
+    $allowed = allowedNextTypes($last, $breakEnabled);
 
     $reason = null;
     $matched = null;
@@ -84,7 +121,7 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
             $reason = 'stale_fix';
         } elseif (!$near['inside']) {
             $reason = 'outside';
-        } elseif ($type !== $expected) {
+        } elseif (!in_array($type, $allowed, true)) {
             $reason = 'sequence';
         }
     }
@@ -112,8 +149,10 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
     $id = (int)db()->lastInsertId();
 
     if ($status === 'accepted') {
-        $message = ($type === 'in' ? 'Entrata' : 'Uscita') . ' registrata alle ' . date('H:i')
+        $message = clockTypeLabel($type) . ' registrata alle ' . date('H:i')
             . ($matched ? ' presso ' . $matched['name'] : '') . '.';
+        $newLast = ['type' => $type, 'clocked_at' => date('Y-m-d H:i:s')];
+        $allowed = allowedNextTypes($newLast, $breakEnabled);
     } else {
         $message = rejectLabel($reason);
         if ($reason === 'outside' && $matched) {
@@ -121,7 +160,7 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
         } elseif ($reason === 'low_accuracy') {
             $message .= sprintf(': ±%d m, massimo consentito %d m. Attiva il GPS e riprova all\'aperto.', round((float)$accuracy), (int)$maxAcc);
         } elseif ($reason === 'sequence') {
-            $message .= ': ora devi timbrare ' . ($expected === 'in' ? 'l\'entrata' : 'l\'uscita') . '.';
+            $message .= ': ora puoi timbrare ' . implode(' o ', array_map(fn($t) => mb_strtolower(clockTypeLabel($t)), $allowed)) . '.';
         } elseif ($reason === 'no_assignment') {
             $message .= ': chiedi al responsabile di assegnarti una sede.';
         } else {
@@ -133,45 +172,71 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
         'ok' => $status === 'accepted',
         'id' => $id,
         'type' => $type,
+        'type_label' => clockTypeLabel($type),
         'status' => $status,
         'reason' => $reason,
         'message' => $message,
         'distance_m' => $distance !== null ? round($distance) : null,
         'location' => $matched ? $matched['name'] : null,
         'clocked_at' => date('Y-m-d H:i:s'),
-        'next_type' => $status === 'accepted' ? ($type === 'in' ? 'out' : 'in') : $expected,
+        'allowed' => $allowed,
+        'next_type' => $allowed[0],
     ];
 }
 
 /**
- * Pair accepted in/out clockings into work sessions per user per day.
- * Returns [user_id => [date => ['minutes' => int, 'first_in' => ?, 'last_out' => ?, 'open' => bool, 'entries' => int]]].
+ * Pair accepted clockings into work sessions per user per day, subtracting clocked breaks.
+ * Returns [user_id => [date => ['minutes','break_min','first_in','last_out','open','entries']]].
  */
 function buildWorkSessions(array $rows): array
 {
     $out = [];
-    $open = []; // user_id => clocked_at of the open "in"
+    $open = [];       // user_id => clocked_at of the open "in"
+    $breakStart = []; // user_id => clocked_at of an open break
+    $breakMin = [];   // user_id => break minutes accumulated in the open session
+    $blank = ['minutes' => 0, 'break_min' => 0, 'first_in' => null, 'last_out' => null, 'open' => false, 'entries' => 0];
     foreach ($rows as $r) {
         $uid = (int)$r['user_id'];
         $day = substr($r['clocked_at'], 0, 10);
-        if (!isset($out[$uid][$day])) {
-            $out[$uid][$day] = ['minutes' => 0, 'first_in' => null, 'last_out' => null, 'open' => false, 'entries' => 0];
-        }
-        $d = &$out[$uid][$day];
+        $ts = strtotime($r['clocked_at']);
         if ($r['type'] === 'in') {
+            if (isset($open[$uid])) {
+                // Previous session never closed: leave it open-flagged on its own day.
+                $prevDay = substr($open[$uid], 0, 10);
+                $out[$uid][$prevDay] = ($out[$uid][$prevDay] ?? $blank);
+                $out[$uid][$prevDay]['open'] = true;
+            }
+            $out[$uid][$day] = $out[$uid][$day] ?? $blank;
             $open[$uid] = $r['clocked_at'];
-            $d['entries']++;
-            $d['first_in'] = $d['first_in'] ?? $r['clocked_at'];
-            $d['open'] = true;
-        } elseif (isset($open[$uid])) {
-            $mins = (int)round((strtotime($r['clocked_at']) - strtotime($open[$uid])) / 60);
+            $breakStart[$uid] = null;
+            $breakMin[$uid] = 0;
+            $out[$uid][$day]['entries']++;
+            $out[$uid][$day]['first_in'] = $out[$uid][$day]['first_in'] ?? $r['clocked_at'];
+            $out[$uid][$day]['open'] = true;
+        } elseif ($r['type'] === 'break_start') {
+            if (isset($open[$uid]) && empty($breakStart[$uid])) {
+                $breakStart[$uid] = $r['clocked_at'];
+            }
+        } elseif ($r['type'] === 'break_end') {
+            if (isset($open[$uid]) && !empty($breakStart[$uid])) {
+                $breakMin[$uid] += max(0, (int)round(($ts - strtotime($breakStart[$uid])) / 60));
+                $breakStart[$uid] = null;
+            }
+        } elseif ($r['type'] === 'out' && isset($open[$uid])) {
+            if (!empty($breakStart[$uid])) {
+                $breakMin[$uid] += max(0, (int)round(($ts - strtotime($breakStart[$uid])) / 60));
+                $breakStart[$uid] = null;
+            }
             $inDay = substr($open[$uid], 0, 10);
-            $out[$uid][$inDay]['minutes'] += max(0, $mins);
-            $out[$uid][$inDay]['last_out'] = $r['clocked_at'];
-            $out[$uid][$inDay]['open'] = false;
-            unset($open[$uid]);
+            $mins = (int)round(($ts - strtotime($open[$uid])) / 60);
+            $d = &$out[$uid][$inDay];
+            $d['minutes'] += max(0, $mins - $breakMin[$uid]);
+            $d['break_min'] += $breakMin[$uid];
+            $d['last_out'] = $r['clocked_at'];
+            $d['open'] = false;
+            unset($d, $open[$uid]);
+            $breakMin[$uid] = 0;
         }
-        unset($d);
     }
     return $out;
 }

@@ -20,7 +20,7 @@ foreach ($lastByUser as $r) {
 $present = [];
 foreach ($employees as $emp) {
     $l = $lastMap[(int)$emp['id']] ?? null;
-    if ($l && $l['type'] === 'in' && substr($l['clocked_at'], 0, 10) === date('Y-m-d')) {
+    if ($l && $l['type'] !== 'out' && substr($l['clocked_at'], 0, 10) === date('Y-m-d')) {
         $present[] = ['name' => $emp['full_name'], 'since' => $l['clocked_at'], 'location' => $l['location_name']];
     }
 }
@@ -29,6 +29,8 @@ $todayStats = fetchOne(
     'SELECT SUM(status = "accepted") AS ok, SUM(status = "rejected") AS rej FROM clockings WHERE DATE(clocked_at) = CURDATE()'
 ) ?: ['ok' => 0, 'rej' => 0];
 $locCount = (int)(fetchOne('SELECT COUNT(*) AS n FROM locations WHERE is_active = 1')['n'] ?? 0);
+$pending = pendingRequestsCount();
+$alertsToday = fetchAll('SELECT a.*, u.full_name FROM alerts a JOIN users u ON u.id = a.user_id WHERE a.`date` >= ? ORDER BY a.created_at DESC LIMIT 20', [date('Y-m-d', strtotime('-1 day'))]);
 
 $recent = fetchAll(
     'SELECT c.*, u.full_name, l.name AS location_name FROM clockings c
@@ -45,7 +47,20 @@ pageStart('Riepilogo', $user);
   <div class="stat"><span class="n"><?= (int)$todayStats['ok'] ?></span><span class="l">timbrature accettate</span></div>
   <div class="stat"><span class="n"><?= (int)$todayStats['rej'] ?></span><span class="l">timbrature rifiutate</span></div>
   <div class="stat"><span class="n"><?= count($employees) ?></span><span class="l">dipendenti attivi</span></div>
+  <div class="stat"><span class="n"><?= $pending ?></span><span class="l"><a href="/admin/requests.php">richieste in attesa</a></span></div>
 </div>
+
+<?php if ($alertsToday): ?>
+<div class="card" style="margin-top:1rem">
+  <h2>Avvisi recenti</h2>
+  <ul class="today-list">
+    <?php foreach ($alertsToday as $a): ?>
+      <li><span><?= e(fmtDate($a['created_at'], 'd/m H:i')) ?> · <?= e($a['message']) ?></span><span class="badge <?= $a['kind'] === 'late' ? 'badge-rej' : 'badge-warn' ?>"><?= $a['kind'] === 'late' ? 'mancata entrata' : 'uscita mancante' ?></span></li>
+    <?php endforeach; ?>
+  </ul>
+  <p class="help" style="margin:.5rem 0 0">Gli avvisi vengono generati dal controllo automatico ogni 5 minuti e inviati ai contatti impostati in <a href="/admin/settings.php#alerts">Impostazioni › Avvisi</a>.</p>
+</div>
+<?php endif; ?>
 
 <?php if ($locCount === 0 || !$employees): ?>
 <div class="card" style="margin-top:1rem">
@@ -75,7 +90,7 @@ pageStart('Riepilogo', $user);
     <ul class="today-list">
       <?php foreach ($recent as $c): ?>
         <li>
-          <span><?= e(fmtDate($c['clocked_at'], 'd/m H:i')) ?> · <?= e($c['full_name']) ?> · <?= $c['type'] === 'in' ? 'Entrata' : 'Uscita' ?></span>
+          <span><?= e(fmtDate($c['clocked_at'], 'd/m H:i')) ?> · <?= e($c['full_name']) ?> · <?= e(clockTypeLabel($c['type'])) ?></span>
           <?php if ($c['status'] === 'accepted'): ?>
             <span class="badge badge-ok">OK</span>
           <?php else: ?>

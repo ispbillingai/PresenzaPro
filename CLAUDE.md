@@ -14,6 +14,12 @@ PHP 8.3 + MariaDB, no framework, Italian UI. See README.md for the structure and
   manual clockings and voiding by admin, monthly summary in `admin/reports.php` computed by
   `includes/attendance.php::attendanceReport()`. Personal login link per employee: `t.php?k=<token>`
   (generate/revoke in the employee form, WhatsApp share via wa.me).
+- Migration 002 (2026-10-07): leave requests (employee → admin approval creates the absence), alerts cron
+  `bin/check-alerts.php` (server crontab every 5 min; email via mail(), WhatsApp via TextMeBot key in
+  settings), leave/permit entitlements + balances page, payroll CSV export, clocked breaks
+  (shift `break_mode`, clocking types break_start/break_end), per-date schedule overrides.
+  Test scripts used during development live in Claude's scratchpad, not in the repo: they seed fixtures
+  into the local XAMPP DB `presenzapro_test` and include the pages with `$_SESSION['user_id']` set.
 
 ## Where it runs
 - Server: 217.160.131.242 (IONOS Ubuntu 24.04, Apache 2.4, PHP 8.3, MariaDB 10.11), SSH as root.

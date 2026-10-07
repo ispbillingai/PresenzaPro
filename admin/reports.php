@@ -64,6 +64,8 @@ pageStart('Riepilogo mensile', $user);
     </label>
     <label style="flex:0 0 auto"><span>&nbsp;</span><button class="btn btn-primary" type="submit">Mostra</button></label>
     <label style="flex:0 0 auto"><span>&nbsp;</span><a class="btn" href="?m=<?= e($month) ?>&user=<?= $uid ?>&export=csv">Esporta CSV</a></label>
+    <label style="flex:0 0 auto"><span>&nbsp;</span><a class="btn" href="/admin/export-payroll.php?m=<?= e($month) ?>&layout=totali" title="Una riga per dipendente con totali per causale">Paghe: totali</a></label>
+    <label style="flex:0 0 auto"><span>&nbsp;</span><a class="btn" href="/admin/export-payroll.php?m=<?= e($month) ?>&layout=giornaliero" title="Una riga per dipendente, giorno e causale (ORD, STR, FER, PER, MAL, ASS, RIT)">Paghe: giornaliero</a></label>
   </form>
   <div class="actions" style="justify-content:space-between;margin:0">
     <a class="btn btn-sm" href="?m=<?= e($prev) ?>&user=<?= $uid ?>">‹ <?= e(monthLabel($prev)) ?></a>
@@ -106,7 +108,7 @@ pageStart('Riepilogo mensile', $user);
     </tbody>
   </table>
   <?php endif; ?>
-  <p class="help" style="margin:.75rem 0 0">Giorni previsti = giorni con fascia oraria assegnata, esclusi i festivi. Assenze = giorni previsti senza timbrature né giustificativo. Anomalie = entrate senza uscita.</p>
+  <p class="help" style="margin:.75rem 0 0">Giorni previsti = giorni con fascia oraria, esclusi i festivi. Ore previste = fino a oggi (i giorni futuri non contano). Assenze = giorni previsti senza timbrature né giustificativo. Anomalie = entrate senza uscita. Le esportazioni "Paghe" usano le causali ORD, STR, FER, PER, MAL, ALT, ASS, RIT.</p>
 </div>
 
 <?php elseif (isset($report[$uid])): $r = $report[$uid]; $t = $r['totals']; ?>
@@ -133,7 +135,7 @@ pageStart('Riepilogo mensile', $user);
         <td><?= e(fmtDate($d['first_in'], 'H:i')) ?></td>
         <td><?= e(fmtDate($d['last_out'], 'H:i')) ?><?= $d['open'] ? ' <span class="badge badge-warn">aperta</span>' : '' ?></td>
         <td class="num"><?= $d['expected_min'] ? e(fmtMinutes((int)$d['expected_min'])) : '' ?></td>
-        <td class="num"><?= $d['worked_min'] ? '<strong>' . e(fmtMinutes((int)$d['worked_min'])) . '</strong>' : '' ?></td>
+        <td class="num"><?= $d['worked_min'] ? '<strong>' . e(fmtMinutes((int)$d['worked_min'])) . '</strong>' : '' ?><?= $d['break_min'] ? '<br><span class="help">pausa ' . (int)$d['break_min'] . ' min</span>' : '' ?></td>
         <td>
           <?php foreach ($d['flags'] as $f): ?>
             <span class="badge <?= str_starts_with($f, 'straord') ? 'badge-ok' : (str_starts_with($f, 'permesso') ? 'badge-info' : 'badge-warn') ?>"><?= e($f) ?><?= $f === 'ritardo' ? ' ' . (int)$d['late_min'] . ' min' : ($f === 'uscita anticipata' ? ' ' . (int)$d['early_min'] . ' min' : ($f === 'straordinario' ? ' ' . (int)$d['overtime_min'] . ' min' : '')) ?></span>

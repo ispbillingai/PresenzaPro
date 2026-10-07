@@ -3,7 +3,6 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
-require_once dirname(__DIR__) . '/includes/attendance.php';
 
 function strftime_it(int $ts): string
 {
@@ -13,19 +12,22 @@ function strftime_it(int $ts): string
 }
 
 $user = requireRole('employee');
-$locations = userLocations((int)$user['id']);
-$last = lastAccepted((int)$user['id']);
-$next = nextClockType($last);
+$uid = (int)$user['id'];
+$locations = userLocations($uid);
+$last = lastAccepted($uid);
 $present = isPresentNow($last);
-$todayShift = allSchedules((int)$user['id'])[(int)$user['id']][(int)date('N')] ?? null;
+$onBreak = isOnBreak($last);
+$todayShift = todayShift($uid);
 $todayHoliday = holidaysBetween(date('Y-m-d'), date('Y-m-d'))[date('Y-m-d')] ?? null;
+$breakEnabled = $todayShift !== null && ($todayShift['break_mode'] ?? 'fixed') === 'clocked';
+$allowed = allowedNextTypes($last, $breakEnabled);
 
 $today = fetchAll(
     'SELECT c.*, l.name AS location_name FROM clockings c
      LEFT JOIN locations l ON l.id = c.location_id
-     WHERE c.user_id = ? AND DATE(c.clocked_at) = CURDATE()
+     WHERE c.user_id = ? AND DATE(c.clocked_at) = CURDATE() AND c.status <> "voided"
      ORDER BY c.clocked_at DESC, c.id DESC',
-    [(int)$user['id']]
+    [$uid]
 );
 
 $locJson = json_encode(array_map(fn($l) => [
@@ -40,7 +42,8 @@ pageStart('Timbra', $user);
 ?>
 <div class="card clock-card"
      id="clock"
-     data-next="<?= e($next) ?>"
+     data-allowed="<?= e(json_encode($allowed)) ?>"
+     data-labels="<?= e(json_encode(CLOCK_TYPE_LABELS, JSON_UNESCAPED_UNICODE)) ?>"
      data-csrf="<?= e(csrfToken()) ?>"
      data-max-accuracy="<?= e(setting('max_accuracy_m', '150')) ?>"
      data-locations="<?= e($locJson) ?>">
@@ -50,11 +53,13 @@ pageStart('Timbra', $user);
   <?php if ($todayHoliday): ?>
     <p class="help" style="margin:0 0 .5rem">Oggi è festivo (<?= e($todayHoliday) ?>).</p>
   <?php elseif ($todayShift): ?>
-    <p class="help" style="margin:0 0 .5rem">Turno di oggi: <strong><?= e(substr($todayShift['start_time'], 0, 5)) ?> - <?= e(substr($todayShift['end_time'], 0, 5)) ?></strong> (<?= e($todayShift['name']) ?>)</p>
+    <p class="help" style="margin:0 0 .5rem">Turno di oggi: <strong><?= e(substr($todayShift['start_time'], 0, 5)) ?> - <?= e(substr($todayShift['end_time'], 0, 5)) ?></strong> (<?= e($todayShift['name']) ?>)<?= $breakEnabled ? ' · pausa da timbrare' : '' ?></p>
   <?php endif; ?>
   <div class="clock-state" id="clock-state">
-    <?php if ($present): ?>
-      <span class="badge badge-in">In servizio</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>
+    <?php if ($onBreak): ?>
+      <span class="badge badge-warn">In pausa</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>
+    <?php elseif ($present): ?>
+      <span class="badge badge-in">In servizio</span>
     <?php else: ?>
       <span class="badge badge-out">Non in servizio</span>
     <?php endif; ?>
@@ -64,9 +69,11 @@ pageStart('Timbra', $user);
     <div class="alert alert-warn">Nessuna sede di lavoro assegnata. Chiedi al responsabile di assegnartene una.</div>
   <?php endif; ?>
 
-  <button type="button" class="btn-clock <?= e($next) ?>" id="btn-clock" disabled>
-    <?= $next === 'in' ? 'Timbra ENTRATA' : 'Timbra USCITA' ?>
-  </button>
+  <div id="clock-buttons">
+    <?php foreach ($allowed as $i => $t): ?>
+      <button type="button" class="btn-clock <?= e($t) ?> <?= $i > 0 ? 'secondary' : '' ?>" data-type="<?= e($t) ?>" disabled><?= $i === 0 ? 'Timbra ' . mb_strtoupper(clockTypeLabel($t)) : clockTypeLabel($t) ?></button>
+    <?php endforeach; ?>
+  </div>
 
   <div class="geo-status waiting" id="geo-status">
     <strong>Rilevamento posizione…</strong>
@@ -83,7 +90,7 @@ pageStart('Timbra', $user);
     <?php endif; ?>
     <?php foreach ($today as $c): ?>
       <li>
-        <span><?= e(fmtDate($c['clocked_at'], 'H:i')) ?> · <?= $c['type'] === 'in' ? 'Entrata' : 'Uscita' ?><?= $c['location_name'] ? ' · ' . e($c['location_name']) : '' ?></span>
+        <span><?= e(fmtDate($c['clocked_at'], 'H:i')) ?> · <?= e(clockTypeLabel($c['type'])) ?><?= $c['location_name'] ? ' · ' . e($c['location_name']) : '' ?></span>
         <?php if ($c['status'] === 'accepted'): ?>
           <span class="badge badge-ok">OK</span>
         <?php else: ?>

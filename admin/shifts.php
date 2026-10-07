@@ -26,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $start = (string)($_POST['start_time'] ?? '');
         $end = (string)($_POST['end_time'] ?? '');
         $break = max(0, min(480, (int)($_POST['break_minutes'] ?? 0)));
+        $breakMode = ($_POST['break_mode'] ?? '') === 'clocked' ? 'clocked' : 'fixed';
         $tolIn = max(0, min(120, (int)($_POST['tolerance_in_min'] ?? 5)));
         $tolOut = max(0, min(120, (int)($_POST['tolerance_out_min'] ?? 5)));
         $errors = [];
@@ -36,11 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('/admin/shifts.php?' . ($id ? 'edit=' . $id : 'new=1'));
         }
         if ($id) {
-            q('UPDATE shifts SET name = ?, start_time = ?, end_time = ?, break_minutes = ?, tolerance_in_min = ?, tolerance_out_min = ? WHERE id = ?',
-                [$name, $start, $end, $break, $tolIn, $tolOut, $id]);
+            q('UPDATE shifts SET name = ?, start_time = ?, end_time = ?, break_minutes = ?, break_mode = ?, tolerance_in_min = ?, tolerance_out_min = ? WHERE id = ?',
+                [$name, $start, $end, $break, $breakMode, $tolIn, $tolOut, $id]);
         } else {
-            q('INSERT INTO shifts (name, start_time, end_time, break_minutes, tolerance_in_min, tolerance_out_min) VALUES (?, ?, ?, ?, ?, ?)',
-                [$name, $start, $end, $break, $tolIn, $tolOut]);
+            q('INSERT INTO shifts (name, start_time, end_time, break_minutes, break_mode, tolerance_in_min, tolerance_out_min) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [$name, $start, $end, $break, $breakMode, $tolIn, $tolOut]);
         }
         flash('ok', 'Fascia oraria salvata.');
         redirect('/admin/shifts.php');
@@ -74,7 +75,15 @@ pageStart('Fasce orarie', $user);
       <label>Nome <input type="text" name="name" required value="<?= e($editing['name'] ?? '') ?>" placeholder="es. Mattina"></label>
       <label>Inizio <input type="time" name="start_time" required value="<?= e(substr($editing['start_time'] ?? '08:00', 0, 5)) ?>"></label>
       <label>Fine <input type="time" name="end_time" required value="<?= e(substr($editing['end_time'] ?? '17:00', 0, 5)) ?>"></label>
-      <label>Pausa non retribuita (min) <input type="number" name="break_minutes" min="0" max="480" value="<?= (int)($editing['break_minutes'] ?? 0) ?>"></label>
+    </div>
+    <div class="inline-fields">
+      <label>Gestione pausa
+        <select name="break_mode">
+          <option value="fixed" <?= ($editing['break_mode'] ?? 'fixed') === 'fixed' ? 'selected' : '' ?>>Fissa: sottrai i minuti indicati</option>
+          <option value="clocked" <?= ($editing['break_mode'] ?? '') === 'clocked' ? 'selected' : '' ?>>Timbrata: il dipendente timbra inizio e fine pausa</option>
+        </select>
+      </label>
+      <label>Pausa fissa non retribuita (min) <input type="number" name="break_minutes" min="0" max="480" value="<?= (int)($editing['break_minutes'] ?? 0) ?>"></label>
     </div>
     <div class="inline-fields">
       <label>Tolleranza ritardo (min) <input type="number" name="tolerance_in_min" min="0" max="120" value="<?= (int)($editing['tolerance_in_min'] ?? 5) ?>"></label>
@@ -99,7 +108,7 @@ pageStart('Fasce orarie', $user);
       <tr class="<?= (int)$s['is_active'] ? '' : 'muted' ?>">
         <td><?= e($s['name']) ?></td>
         <td><?= e(substr($s['start_time'], 0, 5)) ?> - <?= e(substr($s['end_time'], 0, 5)) ?></td>
-        <td class="num"><?= (int)$s['break_minutes'] ?> min</td>
+        <td class="num"><?= ($s['break_mode'] ?? 'fixed') === 'clocked' ? 'timbrata' : (int)$s['break_minutes'] . ' min' ?></td>
         <td class="num"><?= e(fmtMinutes(shiftMinutes($s))) ?></td>
         <td class="num"><?= (int)$s['tolerance_in_min'] ?> / <?= (int)$s['tolerance_out_min'] ?> min</td>
         <td class="num"><?= (int)$s['n_users'] ?></td>

@@ -23,6 +23,21 @@ tolleranza del turno, straordinario oltre `overtime_min_minutes`, uscite mancant
 senza ore copre l'intera giornata; con le ore riduce le ore previste di quel giorno.
 Il link personale `/t.php?k=<token>` fa entrare il dipendente senza password (token revocabile).
 
+## Altre funzioni
+- **Richieste** ferie/permessi dal telefono (`employee/requests.php`), approvazione in `admin/requests.php`
+  (l'approvazione crea la riga in `absences`).
+- **Avvisi**: `bin/check-alerts.php` (cron ogni 5 minuti) segnala mancata entrata e uscita mancante
+  rispetto al turno; invio email (`mail()`) e/o WhatsApp (TextMeBot) ai contatti in Impostazioni › Avvisi;
+  tabella `alerts`, mostrati nel Riepilogo admin.
+- **Saldi** (`admin/balances.php`): ferie spettanti/godute/pianificate/residue, permessi, banca ore
+  (lavorate meno previste da inizio anno), straordinari. Spettanze nella scheda del dipendente.
+- **Export paghe** (`admin/export-payroll.php`): CSV giornaliero per causale (ORD, STR, FER, PER, MAL,
+  ALT, ASS, RIT) o totali mensili per dipendente.
+- **Pausa timbrata**: fascia con `break_mode = clocked` → il dipendente timbra inizio/fine pausa
+  (tipi `break_start`/`break_end`), le ore lavorate escludono la pausa reale.
+- **Pianificazione per data** (`admin/schedule.php`): eccezioni all'orario settimanale (turno diverso o
+  riposo) in `schedule_overrides`, usate da riepilogo, avvisi e pagina Timbra.
+
 ## Installazione
 ```
 cp config/database.example.php config/database.php   # inserisci le credenziali

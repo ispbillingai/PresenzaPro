@@ -11,19 +11,24 @@ function pageStart(string $title, ?array $user = null, array $opts = []): void
                 '/admin/' => 'Riepilogo',
                 '/admin/employees.php' => 'Dipendenti',
                 '/admin/locations.php' => 'Sedi',
-                '/admin/shifts.php' => 'Fasce orarie',
+                '/admin/shifts.php' => 'Fasce',
+                '/admin/schedule.php' => 'Pianificazione',
                 '/admin/clockings.php' => 'Timbrature',
                 '/admin/absences.php' => 'Assenze',
-                '/admin/reports.php' => 'Riepilogo mensile',
+                '/admin/requests.php' => 'Richieste',
+                '/admin/reports.php' => 'Mensile',
+                '/admin/balances.php' => 'Saldi',
                 '/admin/settings.php' => 'Impostazioni',
             ];
         } else {
             $nav = [
                 '/employee/' => 'Timbra',
                 '/employee/history.php' => 'Storico',
+                '/employee/requests.php' => 'Richieste',
             ];
         }
     }
+    $pending = ($user && $user['role'] === 'admin' && function_exists('pendingRequestsCount')) ? pendingRequestsCount() : 0;
     $current = $_SERVER['SCRIPT_NAME'] ?? '';
     $current = preg_replace('#index\.php$#', '', $current);
     ?>
@@ -52,7 +57,7 @@ function pageStart(string $title, ?array $user = null, array $opts = []): void
     <?php if ($user): ?>
     <nav class="nav">
       <?php foreach ($nav as $href => $label): ?>
-        <a href="<?= e($href) ?>" class="<?= $current === $href ? 'active' : '' ?>"><?= e($label) ?></a>
+        <a href="<?= e($href) ?>" class="<?= $current === $href ? 'active' : '' ?>"><?= e($label) ?><?= $href === '/admin/requests.php' && $pending ? ' <span class="nav-badge">' . $pending . '</span>' : '' ?></a>
       <?php endforeach; ?>
       <a href="/logout.php" class="nav-logout" title="<?= e($user['full_name']) ?>">Esci</a>
     </nav>

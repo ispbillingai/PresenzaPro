@@ -21,7 +21,7 @@ if (!is_array($in)) {
     jsonOut(['ok' => false, 'error' => 'Richiesta non valida'], 400);
 }
 
-$type = ($in['type'] ?? '') === 'out' ? 'out' : 'in';
+$type = isset(CLOCK_TYPE_LABELS[$in['type'] ?? '']) ? (string)$in['type'] : 'in';
 $lat = isset($in['lat']) && is_numeric($in['lat']) ? (float)$in['lat'] : null;
 $lng = isset($in['lng']) && is_numeric($in['lng']) ? (float)$in['lng'] : null;
 $acc = isset($in['accuracy']) && is_numeric($in['accuracy']) ? (float)$in['accuracy'] : null;

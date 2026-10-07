@@ -1,8 +1,10 @@
 <?php
 /**
- * Shifts, holidays, absences and the monthly attendance computation ("badge reader" logic).
+ * Shifts, schedule overrides, holidays, absences, leave balances and the attendance computation.
  */
 declare(strict_types=1);
+
+require_once __DIR__ . '/clocking.php';
 
 const ABSENCE_LABELS = [
     'ferie' => 'Ferie',
@@ -26,9 +28,16 @@ const DAY_STATUS_LABELS = [
 
 const WEEKDAY_LABELS = [1 => 'Lunedì', 2 => 'Martedì', 3 => 'Mercoledì', 4 => 'Giovedì', 5 => 'Venerdì', 6 => 'Sabato', 7 => 'Domenica'];
 
+const REQUEST_STATUS_LABELS = ['pending' => 'In attesa', 'approved' => 'Approvata', 'rejected' => 'Rifiutata'];
+
 function absenceLabel(?string $t): string
 {
     return $t ? (ABSENCE_LABELS[$t] ?? $t) : '';
+}
+
+function fmtHoursDec(float $hours): string
+{
+    return rtrim(rtrim(number_format($hours, 2, ',', ''), '0'), ',');
 }
 
 /** Easter Sunday (Gregorian, Meeus/Jones/Butcher). */
@@ -83,7 +92,7 @@ function shiftsMap(bool $activeOnly = false): array
     return array_column($rows, null, 'id');
 }
 
-/** Net minutes of a shift (handles shifts crossing midnight). */
+/** Net expected minutes of a shift. With clocked breaks the whole span is expected. */
 function shiftMinutes(array $s): int
 {
     $start = timeToMinutes($s['start_time']);
@@ -91,7 +100,8 @@ function shiftMinutes(array $s): int
     if ($end <= $start) {
         $end += 24 * 60;
     }
-    return max(0, $end - $start - (int)$s['break_minutes']);
+    $break = ($s['break_mode'] ?? 'fixed') === 'clocked' ? 0 : (int)$s['break_minutes'];
+    return max(0, $end - $start - $break);
 }
 
 function timeToMinutes(string $t): int
@@ -103,6 +113,11 @@ function timeToMinutes(string $t): int
 function shiftLabel(array $s): string
 {
     return $s['name'] . ' ' . substr($s['start_time'], 0, 5) . '-' . substr($s['end_time'], 0, 5);
+}
+
+function shiftShort(array $s): string
+{
+    return mb_strtoupper(mb_substr($s['name'], 0, 3));
 }
 
 /** user_id => [weekday => shift row]. */
@@ -119,6 +134,44 @@ function allSchedules(?int $userId = null): array
         $out[(int)$r['user_id']][(int)$r['weekday']] = $r;
     }
     return $out;
+}
+
+/** user_id => [date => ['shift' => row|null, 'note' => ?]] for the range. */
+function scheduleOverrides(string $from, string $to, ?int $userId = null): array
+{
+    $sql = 'SELECT so.user_id, so.`date`, so.note, s.* FROM schedule_overrides so LEFT JOIN shifts s ON s.id = so.shift_id WHERE so.`date` BETWEEN ? AND ?';
+    $params = [$from, $to];
+    if ($userId) {
+        $sql .= ' AND so.user_id = ?';
+        $params[] = $userId;
+    }
+    $out = [];
+    foreach (fetchAll($sql, $params) as $r) {
+        $out[(int)$r['user_id']][$r['date']] = ['shift' => $r['id'] !== null ? $r : null, 'note' => $r['note']];
+    }
+    return $out;
+}
+
+/** Shift planned for a user on a date (override first, then weekly schedule). */
+function shiftForDay(int $uid, string $date, array $schedules, array $overrides): ?array
+{
+    if (isset($overrides[$uid][$date])) {
+        return $overrides[$uid][$date]['shift'];
+    }
+    return $schedules[$uid][(int)date('N', strtotime($date))] ?? null;
+}
+
+function todayShift(int $uid): ?array
+{
+    $d = date('Y-m-d');
+    return shiftForDay($uid, $d, allSchedules($uid), scheduleOverrides($d, $d, $uid));
+}
+
+/** Whether the employee should clock breaks today (today's shift uses clocked breaks). */
+function breakClockingEnabled(int $uid): bool
+{
+    $s = todayShift($uid);
+    return $s !== null && ($s['break_mode'] ?? 'fixed') === 'clocked';
 }
 
 /** user_id => [date => absence row] for the range (multi-day absences expanded). */
@@ -144,17 +197,19 @@ function absencesByDay(string $from, string $to, ?int $userId = null): array
 
 /**
  * Attendance for every employee (or one) between two dates.
- * Returns [user_id => ['days' => [date => day], 'totals' => [...]]].
+ * Returns [user_id => ['user' => row, 'days' => [date => day], 'totals' => [...]]].
+ * Totals count expected hours only up to today; day rows always carry the planned value.
  */
 function attendanceReport(string $from, string $to, ?int $userId = null, bool $activeOnly = true): array
 {
     $employees = fetchAll(
-        'SELECT id, full_name, username, is_active FROM users WHERE role = "employee"'
+        'SELECT id, full_name, username, is_active, annual_leave_days, leave_carryover_days, annual_permit_hours FROM users WHERE role = "employee"'
         . ($userId ? ' AND id = ' . (int)$userId : '')
         . ($activeOnly && !$userId ? ' AND is_active = 1' : '')
         . ' ORDER BY full_name'
     );
     $schedules = allSchedules($userId);
+    $overrides = scheduleOverrides($from, $to, $userId);
     $absences = absencesByDay($from, $to, $userId);
     $holidays = holidaysBetween($from, $to);
     $overtimeMin = (int)(setting('overtime_min_minutes', '15') ?: 15);
@@ -173,28 +228,30 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
         $uid = (int)$emp['id'];
         $days = [];
         $t = [
-            'worked_min' => 0, 'expected_min' => 0, 'days_present' => 0, 'days_absent' => 0,
-            'days_ferie' => 0, 'days_malattia' => 0, 'days_altro' => 0, 'permesso_min' => 0,
+            'worked_min' => 0, 'expected_min' => 0, 'planned_min' => 0, 'days_present' => 0, 'days_absent' => 0,
+            'days_ferie' => 0, 'days_ferie_future' => 0, 'days_malattia' => 0, 'days_altro' => 0, 'permesso_min' => 0,
             'late_count' => 0, 'late_min' => 0, 'early_count' => 0, 'early_min' => 0,
-            'overtime_min' => 0, 'open_count' => 0, 'days_scheduled' => 0,
+            'overtime_min' => 0, 'open_count' => 0, 'days_scheduled' => 0, 'break_min' => 0,
         ];
         for ($d = $from; $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
             $wd = (int)date('N', strtotime($d));
-            $shift = $schedules[$uid][$wd] ?? null;
+            $shift = shiftForDay($uid, $d, $schedules, $overrides);
+            $override = $overrides[$uid][$d] ?? null;
             $holiday = $holidays[$d] ?? null;
             $ab = $absences[$uid][$d] ?? null;
             $s = $sessions[$uid][$d] ?? null;
             $worked = $s ? (int)$s['minutes'] : 0;
+            $scheduled = $shift && !$holiday;
 
             $day = [
-                'date' => $d, 'weekday' => $wd, 'shift' => $shift, 'holiday' => $holiday, 'absence' => $ab,
-                'expected_min' => 0, 'worked_min' => $worked,
+                'date' => $d, 'weekday' => $wd, 'shift' => $shift, 'override' => $override, 'holiday' => $holiday, 'absence' => $ab,
+                'expected_min' => 0, 'worked_min' => $worked, 'break_min' => $s['break_min'] ?? 0,
                 'first_in' => $s['first_in'] ?? null, 'last_out' => $s['last_out'] ?? null, 'open' => $s['open'] ?? false,
                 'late_min' => 0, 'early_min' => 0, 'overtime_min' => 0, 'status' => 'rest', 'flags' => [],
             ];
 
             $expected = 0;
-            if ($shift && !$holiday) {
+            if ($scheduled) {
                 $expected = shiftMinutes($shift);
                 $t['days_scheduled']++;
             }
@@ -208,22 +265,22 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             $day['expected_min'] = $expected;
 
             // Status
-            if ($holiday && $worked === 0) {
+            if ($holiday && $worked === 0 && !$day['open']) {
                 $day['status'] = 'holiday';
-            } elseif ($ab && $ab['hours'] === null && $worked === 0) {
-                $day['status'] = $ab['type'];
+            } elseif ($ab && $ab['hours'] === null && $worked === 0 && !$day['open']) {
+                $day['status'] = $shift ? $ab['type'] : 'rest';
             } elseif ($worked > 0 || $day['open']) {
-                $day['status'] = ($shift && !$holiday) ? 'present' : 'extra';
-            } elseif ($shift && !$holiday && $d < $today) {
+                $day['status'] = $scheduled ? 'present' : 'extra';
+            } elseif ($scheduled && $d < $today) {
                 $day['status'] = 'absent';
-            } elseif ($shift && !$holiday) {
+            } elseif ($scheduled) {
                 $day['status'] = 'future';
             } else {
                 $day['status'] = 'rest';
             }
 
-            // Late / early / overtime (only on scheduled days with presence)
-            if ($shift && !$holiday && $day['first_in']) {
+            // Late / early (scheduled days with presence)
+            if ($scheduled && $day['first_in']) {
                 $start = strtotime($d . ' ' . $shift['start_time']);
                 $end = strtotime($d . ' ' . $shift['end_time']);
                 if ($end <= $start) {
@@ -242,7 +299,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
                     }
                 }
             }
-            if ($worked > 0 && $expected >= 0 && !$day['open']) {
+            if ($worked > 0 && !$day['open']) {
                 $ot = $worked - $expected;
                 if ($ot >= $overtimeMin) {
                     $day['overtime_min'] = $ot;
@@ -253,12 +310,19 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
                 $day['flags'][] = 'uscita mancante';
             }
             if ($ab && $ab['hours'] !== null) {
-                $day['flags'][] = 'permesso ' . rtrim(rtrim(number_format((float)$ab['hours'], 2, ',', ''), '0'), ',') . ' h';
+                $day['flags'][] = 'permesso ' . fmtHoursDec((float)$ab['hours']) . ' h';
+            }
+            if ($override) {
+                $day['flags'][] = $override['shift'] ? 'turno modificato' : 'riposo pianificato';
             }
 
             // Totals
             $t['worked_min'] += $worked;
-            $t['expected_min'] += $expected;
+            $t['break_min'] += $day['break_min'];
+            $t['planned_min'] += $expected;
+            if ($d <= $today) {
+                $t['expected_min'] += $expected;
+            }
             $t['late_min'] += $day['late_min'];
             $t['late_count'] += $day['late_min'] > 0 ? 1 : 0;
             $t['early_min'] += $day['early_min'];
@@ -267,11 +331,11 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             $t['open_count'] += ($day['open'] && $d < $today) ? 1 : 0;
             if ($day['status'] === 'present' || $day['status'] === 'extra') $t['days_present']++;
             if ($day['status'] === 'absent') $t['days_absent']++;
-            if ($day['status'] === 'ferie') $t['days_ferie']++;
+            if ($day['status'] === 'ferie') { $d > $today ? $t['days_ferie_future']++ : $t['days_ferie']++; }
             if ($day['status'] === 'malattia') $t['days_malattia']++;
             if ($day['status'] === 'altro') $t['days_altro']++;
-            if ($ab && $ab['type'] === 'permesso') {
-                $t['permesso_min'] += $ab['hours'] !== null ? (int)round((float)$ab['hours'] * 60) : ($shift && !$holiday ? shiftMinutes($shift) : 0);
+            if ($ab && $ab['type'] === 'permesso' && $scheduled) {
+                $t['permesso_min'] += $ab['hours'] !== null ? (int)round((float)$ab['hours'] * 60) : shiftMinutes($shift);
             }
 
             $days[$d] = $day;
@@ -279,6 +343,38 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
         $report[$uid] = ['user' => $emp, 'days' => $days, 'totals' => $t];
     }
     return $report;
+}
+
+/**
+ * Leave balances for a year: [user_id => [...]]. Ferie are counted on scheduled days only.
+ */
+function leaveBalances(int $year, ?int $userId = null): array
+{
+    $report = attendanceReport("$year-01-01", "$year-12-31", $userId, false);
+    $out = [];
+    foreach ($report as $uid => $r) {
+        $u = $r['user'];
+        $t = $r['totals'];
+        $entitled = (float)$u['annual_leave_days'] + (float)$u['leave_carryover_days'];
+        $permitEntitled = (float)$u['annual_permit_hours'];
+        $out[$uid] = [
+            'user' => $u,
+            'leave_entitled' => $entitled,
+            'leave_used' => $t['days_ferie'],
+            'leave_planned' => $t['days_ferie_future'],
+            'leave_left' => $entitled - $t['days_ferie'] - $t['days_ferie_future'],
+            'permit_entitled_min' => (int)round($permitEntitled * 60),
+            'permit_used_min' => $t['permesso_min'],
+            'permit_left_min' => (int)round($permitEntitled * 60) - $t['permesso_min'],
+            'bank_min' => $t['worked_min'] - $t['expected_min'],
+            'overtime_min' => $t['overtime_min'],
+            'malattia_days' => $t['days_malattia'],
+            'absent_days' => $t['days_absent'],
+            'worked_min' => $t['worked_min'],
+            'expected_min' => $t['expected_min'],
+        ];
+    }
+    return $out;
 }
 
 function monthBounds(string $month): array
@@ -310,6 +406,37 @@ function dayStatusBadge(array $day): string
     return '<span class="badge ' . ($map[$day['status']] ?? '') . '">' . e($label) . '</span>';
 }
 
+/** Rows for the payroll export: one row per employee/day/causale. */
+function payrollRows(array $report): array
+{
+    $rows = [];
+    foreach ($report as $r) {
+        $u = $r['user'];
+        foreach ($r['days'] as $d) {
+            $base = [$u['full_name'], $u['username'], fmtDate($d['date'], 'd/m/Y')];
+            $expectedShift = $d['shift'] ? shiftMinutes($d['shift']) : 0;
+            if ($d['worked_min'] > 0) {
+                $ord = $d['worked_min'] - $d['overtime_min'];
+                if ($ord > 0) $rows[] = [...$base, 'ORD', 'Ore ordinarie', number_format($ord / 60, 2, ',', ''), ''];
+                if ($d['overtime_min'] > 0) $rows[] = [...$base, 'STR', 'Straordinario', number_format($d['overtime_min'] / 60, 2, ',', ''), ''];
+            }
+            $ab = $d['absence'];
+            if ($ab) {
+                $code = ['ferie' => 'FER', 'permesso' => 'PER', 'malattia' => 'MAL', 'altro' => 'ALT'][$ab['type']];
+                $h = $ab['hours'] !== null ? (float)$ab['hours'] : ($d['shift'] && !$d['holiday'] ? $expectedShift / 60 : 0);
+                if ($h > 0) $rows[] = [...$base, $code, absenceLabel($ab['type']), number_format($h, 2, ',', ''), (string)($ab['note'] ?? '')];
+            }
+            if ($d['status'] === 'absent') {
+                $rows[] = [...$base, 'ASS', 'Assenza ingiustificata', number_format($expectedShift / 60, 2, ',', ''), ''];
+            }
+            if ($d['late_min'] > 0) {
+                $rows[] = [...$base, 'RIT', 'Ritardo', number_format($d['late_min'] / 60, 2, ',', ''), $d['late_min'] . ' min'];
+            }
+        }
+    }
+    return $rows;
+}
+
 /** Personal login link helpers. */
 function personalLink(array $user): ?string
 {
@@ -331,4 +458,9 @@ function whatsappNumber(?string $phone): ?string
         $digits = '39' . $digits;
     }
     return $digits;
+}
+
+function pendingRequestsCount(): int
+{
+    return (int)(fetchOne('SELECT COUNT(*) AS n FROM leave_requests WHERE status = "pending"')['n'] ?? 0);
 }
