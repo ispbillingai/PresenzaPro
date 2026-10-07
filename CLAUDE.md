@@ -15,11 +15,9 @@ PHP 8.3 + MariaDB, no framework, Italian UI. See README.md for the structure and
   Credentials and the plink one-liner are in Claude's local memory `pub-server.md`
   (`C:\Users\magom\.claude\projects\f--PresenzaPro\memory\`), never in git.
 - App folder: `/var/www/html/presenzapro` (git clone, branch `main`).
-- Domain: `presenzapro.upgradesrls.com`, vhost `/etc/apache2/sites-available/presenzapro.conf` (port 80).
-  **DNS not pointed yet** (2026-10-07). Until then test with
-  `curl -H "Host: presenzapro.upgradesrls.com" http://127.0.0.1/`. When the A record points to the server:
-  `certbot --apache -d presenzapro.upgradesrls.com --redirect`. **HTTPS is required** for browser
-  geolocation, so the clock page only works on phones after the certificate is in place.
+- Domain: https://presenzapro.upgradesrls.com (DNS pointed and Let's Encrypt certificate installed on
+  2026-10-07, auto-renew via certbot). Vhosts: `/etc/apache2/sites-available/presenzapro.conf` (port 80,
+  redirects to HTTPS) and `presenzapro-le-ssl.conf` (443). HTTPS is required for browser geolocation.
 - DB: `presenzapro`, user `presenzapro` (password only in the server's `config/database.php`).
 - Logs: `/var/log/apache2/presenzapro.upgradesrls.com-error.log`.
 - Admin user: created with `php bin/create-admin.php <user> <password> "Nome"` on the server.
