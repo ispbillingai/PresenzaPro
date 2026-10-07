@@ -1,167 +1,89 @@
 <?php
-/**
- * Admin Dashboard
- * Restaurant POS System
- */
+declare(strict_types=1);
+require_once dirname(__DIR__) . '/includes/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/layout.php';
+require_once dirname(__DIR__) . '/includes/clocking.php';
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/table_visual.php';
-requireRole(['admin']);
+$user = requireRole('admin');
 
-$pdo = getDBConnection();
-
-// Get statistics
-$stats = [];
-
-// Today's orders
-$stmt = $pdo->query("SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM orders WHERE DATE(opened_at) = CURDATE()");
-$stats['today'] = $stmt->fetch();
-
-// Active orders
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM orders WHERE status NOT IN ('paid', 'cancelled')");
-$stats['active_orders'] = $stmt->fetch()['count'];
-
-// Tables
-$stmt = $pdo->query("SELECT COUNT(*) as total, SUM(CASE WHEN status != 'free' THEN 1 ELSE 0 END) as occupied FROM tables_restaurant");
-$stats['tables'] = $stmt->fetch();
-
-// Users
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE active = 1");
-$stats['users'] = $stmt->fetch()['count'];
-
-// Menu items
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM menu_items WHERE active = 1");
-$stats['menu_items'] = $stmt->fetch()['count'];
-
-// Recent orders
-$stmt = $pdo->query("
-    SELECT o.*, COALESCE(o.table_label, t.table_number) AS table_number, u.full_name as waiter_name
-    FROM orders o
-    JOIN tables_restaurant t ON o.table_id = t.id
-    JOIN users u ON o.waiter_id = u.id
-    ORDER BY o.created_at DESC
-    LIMIT 10
-");
-$recentOrders = $stmt->fetchAll();
-
-$pageTitle = t('admin_dashboard');
-
-include __DIR__ . '/../includes/header.php';
-?>
-
-<div class="page-header">
-    <h1><i class="fas fa-tachometer-alt"></i> <?= te('dashboard') ?></h1>
-</div>
-
-<!-- Stats -->
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="stat-icon primary">
-            <i class="fas fa-receipt"></i>
-        </div>
-        <div>
-            <div class="stat-value"><?= $stats['today']['count'] ?></div>
-            <div class="stat-label"><?= te('orders_today') ?></div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-icon success">
-            <i class="fas fa-euro-sign"></i>
-        </div>
-        <div>
-            <div class="stat-value"><?= formatCurrency($stats['today']['total']) ?></div>
-            <div class="stat-label"><?= te('revenue_today') ?></div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-icon warning">
-            <i class="fas fa-clipboard-list"></i>
-        </div>
-        <div>
-            <div class="stat-value"><?= $stats['active_orders'] ?></div>
-            <div class="stat-label"><?= te('active_orders') ?></div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-icon info">
-            <i class="fas fa-chair"></i>
-        </div>
-        <div>
-            <div class="stat-value"><?= $stats['tables']['occupied'] ?? 0 ?>/<?= $stats['tables']['total'] ?? 0 ?></div>
-            <div class="stat-label"><?= te('tables_occupied') ?></div>
-        </div>
-    </div>
-</div>
-
-<?php
-// Paid tables still to be cleared and laid again.
-$toLay = [];
-if (tablesToLay()) {
-    $toLay = getDBConnection()->query("
-        SELECT t.id, t.table_number, t.needs_reset_at, r.name AS room_name
-        FROM tables_restaurant t JOIN rooms r ON r.id = t.room_id
-        WHERE t.needs_reset_at IS NOT NULL AND t.status = 'free'
-        ORDER BY t.needs_reset_at
-    ")->fetchAll();
+$employees = fetchAll('SELECT id, full_name FROM users WHERE role = "employee" AND is_active = 1 ORDER BY full_name');
+$lastByUser = fetchAll(
+    'SELECT c.user_id, c.type, c.clocked_at, l.name AS location_name
+     FROM clockings c
+     JOIN (SELECT user_id, MAX(id) AS id FROM clockings WHERE status = "accepted" GROUP BY user_id) m ON m.id = c.id
+     LEFT JOIN locations l ON l.id = c.location_id'
+);
+$lastMap = [];
+foreach ($lastByUser as $r) {
+    $lastMap[(int)$r['user_id']] = $r;
 }
+$present = [];
+foreach ($employees as $emp) {
+    $l = $lastMap[(int)$emp['id']] ?? null;
+    if ($l && $l['type'] === 'in' && substr($l['clocked_at'], 0, 10) === date('Y-m-d')) {
+        $present[] = ['name' => $emp['full_name'], 'since' => $l['clocked_at'], 'location' => $l['location_name']];
+    }
+}
+
+$todayStats = fetchOne(
+    'SELECT SUM(status = "accepted") AS ok, SUM(status = "rejected") AS rej FROM clockings WHERE DATE(clocked_at) = CURDATE()'
+) ?: ['ok' => 0, 'rej' => 0];
+$locCount = (int)(fetchOne('SELECT COUNT(*) AS n FROM locations WHERE is_active = 1')['n'] ?? 0);
+
+$recent = fetchAll(
+    'SELECT c.*, u.full_name, l.name AS location_name FROM clockings c
+     JOIN users u ON u.id = c.user_id
+     LEFT JOIN locations l ON l.id = c.location_id
+     ORDER BY c.clocked_at DESC, c.id DESC LIMIT 15'
+);
+
+pageStart('Riepilogo', $user);
 ?>
-<?php if ($toLay): ?>
-<div class="card mb-lg lay-card">
-    <div class="card-header">
-        <h2><i class="fas fa-broom" style="color:#2563eb;"></i> <?= te('tables_to_lay_title') ?></h2>
-        <span class="badge" style="background:#2563eb;color:#fff;"><?= count($toLay) ?></span>
-    </div>
-    <div class="card-body lay-list">
-        <?php foreach ($toLay as $lt): ?>
-            <div class="lay-row">
-                <div><strong><?= te('table') ?> <?= htmlspecialchars($lt['table_number']) ?></strong>
-                    <span class="text-muted"> · <?= htmlspecialchars($lt['room_name']) ?> · <?= te('table_to_lay_since', ['time' => date('H:i', strtotime($lt['needs_reset_at']))]) ?></span></div>
-                <?= tableLaidButton((int) $lt['id']) ?: '<span class="text-muted" style="font-size:.85rem;"><i class="fas fa-user-tie"></i> ' . te('table_laid_by_waiter') . '</span>' ?>
-            </div>
-        <?php endforeach; ?>
-    </div>
+<h1>Riepilogo di oggi</h1>
+<div class="stats">
+  <div class="stat"><span class="n"><?= count($present) ?></span><span class="l">in servizio ora</span></div>
+  <div class="stat"><span class="n"><?= (int)$todayStats['ok'] ?></span><span class="l">timbrature accettate</span></div>
+  <div class="stat"><span class="n"><?= (int)$todayStats['rej'] ?></span><span class="l">timbrature rifiutate</span></div>
+  <div class="stat"><span class="n"><?= count($employees) ?></span><span class="l">dipendenti attivi</span></div>
+</div>
+
+<?php if ($locCount === 0 || !$employees): ?>
+<div class="card" style="margin-top:1rem">
+  <h2>Per iniziare</h2>
+  <ol style="margin:0;padding-left:1.2rem">
+    <li><a href="/admin/locations.php">Crea una sede di lavoro</a> con posizione sulla mappa e raggio consentito.</li>
+    <li><a href="/admin/employees.php">Aggiungi i dipendenti</a> e assegna a ciascuno la sua sede.</li>
+    <li>Ogni dipendente accede dal telefono con il proprio nome utente e timbra solo se si trova sul posto.</li>
+  </ol>
 </div>
 <?php endif; ?>
-<?= tableLayWatch() ?>
 
-<!-- Recent Orders -->
-<div class="card">
-    <div class="card-header">
-        <h2><?= te('recent_orders') ?></h2>
-        <a href="/admin/orders.php" class="btn btn-sm btn-outline"><?= te('view_all') ?></a>
-    </div>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th><?= te('order_no') ?></th>
-                <th><?= te('table') ?></th>
-                <th><?= te('waiter') ?></th>
-                <th><?= te('total') ?></th>
-                <th><?= te('status') ?></th>
-                <th><?= te('time') ?></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($recentOrders as $order): ?>
-                <tr>
-                    <td><strong><?= htmlspecialchars($order['order_number']) ?></strong></td>
-                    <td><?= htmlspecialchars($order['table_number']) ?></td>
-                    <td><?= htmlspecialchars($order['waiter_name']) ?></td>
-                    <td><strong><?= formatCurrency($order['total']) ?></strong></td>
-                    <td>
-                        <span class="badge badge-<?= 
-                            $order['status'] === 'paid' ? 'success' : 
-                            ($order['status'] === 'cancelled' ? 'danger' : 
-                            ($order['status'] === 'bill_requested' ? 'warning' : 'info')) 
-                        ?>">
-                            <?= htmlspecialchars(statusLabel($order['status'])) ?>
-                        </span>
-                    </td>
-                    <td><?= date('H:i', strtotime($order['created_at'])) ?></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+<div class="grid" style="margin-top:1rem">
+  <div class="card">
+    <h2>In servizio adesso</h2>
+    <?php if (!$present): ?><span class="help">Nessuno.</span><?php endif; ?>
+    <ul class="today-list">
+      <?php foreach ($present as $p): ?>
+        <li><span><?= e($p['name']) ?><?= $p['location'] ? ' · ' . e($p['location']) : '' ?></span><span class="badge badge-in">dalle <?= e(fmtDate($p['since'], 'H:i')) ?></span></li>
+      <?php endforeach; ?>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Ultime timbrature</h2>
+    <?php if (!$recent): ?><span class="help">Nessuna timbratura.</span><?php endif; ?>
+    <ul class="today-list">
+      <?php foreach ($recent as $c): ?>
+        <li>
+          <span><?= e(fmtDate($c['clocked_at'], 'd/m H:i')) ?> · <?= e($c['full_name']) ?> · <?= $c['type'] === 'in' ? 'Entrata' : 'Uscita' ?></span>
+          <?php if ($c['status'] === 'accepted'): ?>
+            <span class="badge badge-ok">OK</span>
+          <?php else: ?>
+            <span class="badge badge-rej"><?= e(rejectLabel($c['reject_reason'])) ?></span>
+          <?php endif; ?>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+    <p style="margin:.75rem 0 0"><a href="/admin/clockings.php">Tutte le timbrature ›</a></p>
+  </div>
 </div>
-
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php pageEnd(); ?>

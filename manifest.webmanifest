@@ -1,0 +1,12 @@
+{
+  "name": "PresenzaPro",
+  "short_name": "PresenzaPro",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f5f8",
+  "theme_color": "#1f4e79",
+  "lang": "it",
+  "icons": [
+    { "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

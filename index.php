@@ -1,35 +1,9 @@
 <?php
-/**
- * Main Index - Redirect based on role
- * Restaurant POS System
- */
+declare(strict_types=1);
+require_once __DIR__ . '/includes/bootstrap.php';
 
-require_once __DIR__ . '/includes/functions.php';
-
-if (!isLoggedIn()) {
-    header('Location: /login.php');
-    exit;
+$u = currentUser();
+if ($u === null) {
+    redirect('/login.php');
 }
-
-$user = getCurrentUser();
-
-switch ($user['role']) {
-    case 'admin':
-        header('Location: /admin/index.php');
-        break;
-    case 'waiter':
-        header('Location: /waiter/index.php');
-        break;
-    case 'cashier':
-        header('Location: /cashier/index.php');
-        break;
-    case 'kitchen':
-        header('Location: /kitchen/index.php');
-        break;
-    case TILL_OPERATOR_ROLE:
-        header('Location: /cashier/online.php');
-        break;
-    default:
-        header('Location: /login.php');
-}
-exit;
+redirect($u['role'] === 'admin' ? '/admin/' : '/employee/');
