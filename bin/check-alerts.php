@@ -15,7 +15,7 @@ require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
 require_once dirname(__DIR__) . '/includes/notify.php';
 
-if ((setting('alerts_enabled', '1') ?: '1') !== '1') {
+if (setting('alerts_enabled', '1') === '0') {
     exit(0);
 }
 

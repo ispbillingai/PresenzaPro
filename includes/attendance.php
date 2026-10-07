@@ -440,17 +440,6 @@ function payrollRows(array $report): array
     return $rows;
 }
 
-/** Personal login link helpers. */
-function personalLink(array $user): ?string
-{
-    if (empty($user['login_token'])) {
-        return null;
-    }
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'presenzapro.upgradesrls.com';
-    return $scheme . '://' . $host . '/t.php?k=' . $user['login_token'];
-}
-
 function whatsappNumber(?string $phone): ?string
 {
     $digits = preg_replace('/\D+/', '', (string)$phone);

@@ -9,7 +9,7 @@ PHP 8.3, MariaDB 10.11, Apache. Nessuna dipendenza esterna lato server. Leaflet 
 (CDN) per la mappa delle sedi nell'area admin.
 
 ## Ruoli
-- **Admin**: dipendenti (con link personale di accesso inviabile via WhatsApp), sedi (punto + raggio),
+- **Admin**: dipendenti (con webhook GET opzionale chiamato a ogni timbratura), sedi (punto + raggio),
   fasce orarie e orario settimanale, timbrature (anche manuali, annullabili), assenze/permessi,
   riepilogo mensile stile lettore badge, festività, impostazioni.
 - **Dipendente**: pagina "Timbra" (entrata/uscita con GPS, turno del giorno) e storico mensile con stato di ogni giorno.
@@ -21,7 +21,11 @@ ore lavorate (coppie entrata/uscita accettate, manuali comprese, annullate esclu
 (presente, assente, ferie, permesso, malattia, riposo, festivo), ritardo e uscita anticipata oltre la
 tolleranza del turno, straordinario oltre `overtime_min_minutes`, uscite mancanti. Un giustificativo
 senza ore copre l'intera giornata; con le ore riduce le ore previste di quel giorno.
-Il link personale `/t.php?k=<token>` fa entrare il dipendente senza password (token revocabile).
+**Webhook**: per ogni dipendente si può impostare un URL (`users.webhook_url`, attivabile per dipendente e
+globalmente con `settings.webhooks_enabled`) chiamato in GET dopo ogni timbratura accettata, con segnaposto
+`{user_id} {username} {name} {type} {type_label} {date} {time} {datetime} {timestamp} {location} {lat} {lng} {clocking_id}`
+o, senza segnaposto, gli stessi valori come parametri. La chiamata avviene dopo l'invio della risposta al
+telefono (`includes/webhook.php`), esito in `webhook_log`, bottone di prova nella scheda del dipendente.
 
 ## Altre funzioni
 - **Richieste** ferie/permessi dal telefono (`employee/requests.php`), approvazione in `admin/requests.php`

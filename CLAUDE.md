@@ -12,8 +12,10 @@ PHP 8.3 + MariaDB, no framework, Italian UI. See README.md for the structure and
 - "Badge reader" features (2026-10-07, migration 001): shifts + weekly schedule per employee, absences
   (ferie/permesso/malattia/altro, whole-day or hours), company holidays + computed Italian national ones,
   manual clockings and voiding by admin, monthly summary in `admin/reports.php` computed by
-  `includes/attendance.php::attendanceReport()`. Personal login link per employee: `t.php?k=<token>`
-  (generate/revoke in the employee form, WhatsApp share via wa.me).
+  `includes/attendance.php::attendanceReport()`. Per-employee clocking webhook (migration 004 replaced the earlier personal
+  login link, which the user did NOT want): `users.webhook_url` + `webhook_enabled`, global
+  `settings.webhooks_enabled`, GET fired after the API response in `api/clock.php` via
+  `includes/webhook.php`, logged in `webhook_log`, test button in the employee form.
 - Migration 002 (2026-10-07): leave requests (employee → admin approval creates the absence), alerts cron
   `bin/check-alerts.php` (server crontab every 5 min; email via mail(), WhatsApp via TextMeBot key in
   settings), leave/permit entitlements + balances page, payroll CSV export, clocked breaks

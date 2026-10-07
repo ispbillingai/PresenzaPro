@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setSetting('max_accuracy_m', (string)max(10, min(2000, $maxAcc)));
         setSetting('max_fix_age_s', (string)max(10, min(3600, $maxAge)));
         setSetting('overtime_min_minutes', (string)max(0, min(240, $otMin)));
+        setSetting('webhooks_enabled', !empty($_POST['webhooks_enabled']) ? '1' : '0');
         flash('ok', 'Impostazioni salvate.');
         redirect('/admin/settings.php');
     }
@@ -106,6 +107,9 @@ pageStart('Impostazioni', $user);
         <input type="number" name="overtime_min_minutes" min="0" max="240" value="<?= e(setting('overtime_min_minutes', '15')) ?>">
         <span class="help">Sotto questa soglia il tempo in più non viene conteggiato come straordinario.</span>
       </label>
+      <label class="checks"><input type="checkbox" name="webhooks_enabled" value="1" <?= setting('webhooks_enabled', '1') !== '0' ? 'checked' : '' ?>> Webhook alla timbratura attivi
+        <span class="help">(interruttore generale: se spento non viene chiamato nessun URL, anche se impostato nei dipendenti)</span>
+      </label>
       <button class="btn btn-primary" type="submit">Salva</button>
     </form>
   </div>
@@ -129,7 +133,7 @@ pageStart('Impostazioni', $user);
     <form method="post">
       <?= csrfField() ?>
       <input type="hidden" name="action" value="alerts">
-      <label class="checks"><input type="checkbox" name="alerts_enabled" value="1" <?= (setting('alerts_enabled', '1') ?: '1') === '1' ? 'checked' : '' ?>> Avvisi attivi</label>
+      <label class="checks"><input type="checkbox" name="alerts_enabled" value="1" <?= setting('alerts_enabled', '1') !== '0' ? 'checked' : '' ?>> Avvisi attivi</label>
       <div class="inline-fields">
         <label>Mancata entrata dopo (min) <input type="number" name="late_alert_minutes" min="1" max="240" value="<?= e(setting('late_alert_minutes', '15')) ?>"></label>
         <label>Uscita mancante dopo fine turno (min) <input type="number" name="missing_out_alert_minutes" min="1" max="600" value="<?= e(setting('missing_out_alert_minutes', '60')) ?>"></label>
