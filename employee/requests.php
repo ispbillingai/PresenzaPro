@@ -45,6 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $requests = fetchAll('SELECT * FROM leave_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 100', [$uid]);
+$snapshot = [];
+foreach ($requests as $r) {
+    $snapshot[(int)$r['id']] = $r['status'] . '|' . (string)$r['admin_note'] . '|' . (string)$r['decided_at'];
+}
+$snapshotHash = md5(json_encode($snapshot));
+if (isset($_GET['changed'])) {
+    flash('ok', 'Il responsabile ha risposto a una tua richiesta: vedi l\'esito qui sotto.');
+}
 $bal = leaveBalances((int)date('Y'), $uid)[$uid] ?? null;
 
 pageStart('Richieste', $user);
@@ -116,4 +124,20 @@ pageStart('Richieste', $user);
     <?php endforeach; ?>
   </ul>
 </div>
+<script>
+(function () {
+  var hash = <?= json_encode($snapshotHash) ?>;
+  function check() {
+    if (document.hidden) return;
+    fetch('/api/requests-status.php', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.ok) return;
+        if (d.hash !== hash) { window.location.replace('/employee/requests.php?changed=1'); }
+      }).catch(function () {});
+  }
+  setInterval(check, 7000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+})();
+</script>
 <?php pageEnd(); ?>

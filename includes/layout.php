@@ -29,6 +29,8 @@ function pageStart(string $title, ?array $user = null, array $opts = []): void
         }
     }
     $pending = ($user && $user['role'] === 'admin' && function_exists('pendingRequestsCount')) ? pendingRequestsCount() : 0;
+    $GLOBALS['__pp_user'] = $user;
+    $GLOBALS['__pp_pending'] = $pending;
     $current = $_SERVER['SCRIPT_NAME'] ?? '';
     $current = preg_replace('#index\.php$#', '', $current);
     ?>
@@ -75,6 +77,34 @@ function pageEnd(): void
 {
     ?>
 </main>
+<?php if (!empty($GLOBALS['__pp_user']) && $GLOBALS['__pp_user']['role'] === 'admin'): ?>
+<script>
+(function () {
+  var last = <?= (int)($GLOBALS['__pp_pending'] ?? 0) ?>;
+  var onRequests = window.location.pathname === '/admin/requests.php';
+  function check() {
+    if (document.hidden) return;
+    fetch('/api/requests-status.php', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.ok || typeof d.pending !== 'number') return;
+        var link = document.querySelector('.nav a[href="/admin/requests.php"]');
+        if (link) {
+          var b = link.querySelector('.nav-badge');
+          if (d.pending > 0) {
+            if (!b) { b = document.createElement('span'); b.className = 'nav-badge'; link.appendChild(document.createTextNode(' ')); link.appendChild(b); }
+            b.textContent = d.pending;
+          } else if (b) { b.remove(); }
+        }
+        if (onRequests && d.pending !== last) { window.location.reload(); }
+        last = d.pending;
+      }).catch(function () {});
+  }
+  setInterval(check, 15000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+})();
+</script>
+<?php endif; ?>
 <footer class="footer"><span class="powered">powered by <img src="/assets/brand/upgrade-logo.png" alt="Upgrade" width="86" height="28"></span><span class="help"><?= e(APP_NAME) ?> <?= e(APP_VERSION) ?></span></footer>
 </body>
 </html>
