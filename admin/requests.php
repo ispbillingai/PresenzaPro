@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/notify.php';
 
 $user = requireRole('admin');
 
@@ -22,7 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 [(int)$r['user_id'], $r['type'], $r['date_from'], $r['date_to'], $r['hours'], $r['note'], (int)$user['id'], $id]);
         }
         $pdo->commit();
-        flash('ok', $action === 'approve' ? 'Richiesta approvata e registrata tra le assenze.' : 'Richiesta rifiutata.');
+        $emp = fetchOne('SELECT * FROM users WHERE id = ?', [(int)$r['user_id']]);
+        $company = setting('company_name', APP_NAME) ?: APP_NAME;
+        $text = sprintf("Ciao %s, la tua richiesta %s è stata %s.%s\n%s", $emp['full_name'], requestSummary($r),
+            $action === 'approve' ? 'APPROVATA' : 'RIFIUTATA', $adminNote ? "\nNota: " . $adminNote : '', $company);
+        $sent = setting('notify_requests', '1') !== '0' ? notifyEmployee($emp, ($action === 'approve' ? 'Richiesta approvata' : 'Richiesta rifiutata') . ' - ' . $company, $text) : [];
+        flash('ok', ($action === 'approve' ? 'Richiesta approvata e registrata tra le assenze.' : 'Richiesta rifiutata.')
+            . ($sent ? ' Dipendente avvisato via ' . implode(' e ', $sent) . '.' : ' Nessun avviso inviato al dipendente (serve il cellulare con la chiave WhatsApp in Impostazioni, o l\'email).'));
     }
     redirect('/admin/requests.php' . (($_POST['show'] ?? '') === 'all' ? '?show=all' : ''));
 }

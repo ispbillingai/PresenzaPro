@@ -30,6 +30,8 @@ telefono (`includes/webhook.php`), esito in `webhook_log`, bottone di prova nell
 ## Altre funzioni
 - **Richieste** ferie/permessi dal telefono (`employee/requests.php`), approvazione in `admin/requests.php`
   (l'approvazione crea la riga in `absences`).
+- **Messaggi richieste**: nuova richiesta → admin (`notifyAdmin`), decisione → dipendente (`notifyEmployee`:
+  WhatsApp sul suo cellulare via TextMeBot e/o email); interruttore `settings.notify_requests`.
 - **Avvisi**: `bin/check-alerts.php` (cron ogni 5 minuti) segnala mancata entrata e uscita mancante
   rispetto al turno; invio email (`mail()`) e/o WhatsApp (TextMeBot) ai contatti in Impostazioni › Avvisi;
   tabella `alerts`, mostrati nel Riepilogo admin.

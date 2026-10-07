@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/notify.php';
 
 $user = requireRole('employee');
 $uid = (int)$user['id'];
@@ -39,7 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('/employee/requests.php?new=1');
         }
         q('INSERT INTO leave_requests (user_id, type, date_from, date_to, hours, note) VALUES (?, ?, ?, ?, ?, ?)', [$uid, $type, $from, $to, $hours, $note]);
-        flash('ok', 'Richiesta inviata. Riceverai l\'esito qui.');
+        $req = fetchOne('SELECT * FROM leave_requests WHERE id = ?', [(int)db()->lastInsertId()]);
+        if (setting('notify_requests', '1') !== '0') {
+            $host = $_SERVER['HTTP_HOST'] ?? 'presenzapro.upgradesrls.com';
+            notifyAdmin('Nuova richiesta: ' . $user['full_name'],
+                sprintf("%s ha richiesto: %s.%s\nApprova o rifiuta su https://%s/admin/requests.php", $user['full_name'], requestSummary($req), $note ? "\nMotivo: " . $note : '', $host));
+        }
+        flash('ok', 'Richiesta inviata. Riceverai l\'esito qui' . (whatsappNumber($user['phone']) || $user['email'] ? ' e con un messaggio' : '') . '.');
         redirect('/employee/requests.php');
     }
 }

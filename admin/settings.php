@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         setSetting('late_alert_minutes', (string)max(1, min(240, (int)($_POST['late_alert_minutes'] ?? 15))));
         setSetting('missing_out_alert_minutes', (string)max(1, min(600, (int)($_POST['missing_out_alert_minutes'] ?? 60))));
+        setSetting('notify_requests', !empty($_POST['notify_requests']) ? '1' : '0');
         if (!empty($_POST['test'])) {
             require_once dirname(__DIR__) . '/includes/notify.php';
             $sent = notifyAdmin('Test avvisi ' . (setting('company_name', APP_NAME) ?: APP_NAME), 'Questo è un messaggio di prova dagli avvisi di PresenzaPro.');
@@ -133,7 +134,10 @@ pageStart('Impostazioni', $user);
     <form method="post">
       <?= csrfField() ?>
       <input type="hidden" name="action" value="alerts">
-      <label class="checks"><input type="checkbox" name="alerts_enabled" value="1" <?= setting('alerts_enabled', '1') !== '0' ? 'checked' : '' ?>> Avvisi attivi</label>
+      <label class="checks"><input type="checkbox" name="alerts_enabled" value="1" <?= setting('alerts_enabled', '1') !== '0' ? 'checked' : '' ?>> Avvisi mancata entrata / uscita mancante</label>
+      <label class="checks"><input type="checkbox" name="notify_requests" value="1" <?= setting('notify_requests', '1') !== '0' ? 'checked' : '' ?>> Messaggi per le richieste ferie/permessi
+        <span class="help">(al datore di lavoro quando arriva una richiesta, al dipendente quando viene decisa: WhatsApp sul cellulare della sua scheda e/o email)</span>
+      </label>
       <div class="inline-fields">
         <label>Mancata entrata dopo (min) <input type="number" name="late_alert_minutes" min="1" max="240" value="<?= e(setting('late_alert_minutes', '15')) ?>"></label>
         <label>Uscita mancante dopo fine turno (min) <input type="number" name="missing_out_alert_minutes" min="1" max="600" value="<?= e(setting('missing_out_alert_minutes', '60')) ?>"></label>

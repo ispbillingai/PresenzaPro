@@ -31,6 +31,31 @@ function sendWhatsApp(string $phone, string $text): bool
     return $res !== false && $code >= 200 && $code < 300;
 }
 
+/** Notify an employee (WhatsApp if phone + API key, email if address). Returns channels that worked. */
+function notifyEmployee(array $emp, string $subject, string $text): array
+{
+    $sent = [];
+    if (sendWhatsApp((string)($emp['phone'] ?? ''), $text)) {
+        $sent[] = 'whatsapp';
+    }
+    if (sendEmail((string)($emp['email'] ?? ''), $subject, $text)) {
+        $sent[] = 'email';
+    }
+    return $sent;
+}
+
+function requestSummary(array $r): string
+{
+    $s = absenceLabel($r['type']) . ' ' . fmtDate($r['date_from'], 'd/m/Y');
+    if ($r['date_to'] !== $r['date_from']) {
+        $s .= ' - ' . fmtDate($r['date_to'], 'd/m/Y');
+    }
+    if ($r['hours'] !== null) {
+        $s .= ' (' . fmtHoursDec((float)$r['hours']) . ' h)';
+    }
+    return $s;
+}
+
 /** Send an alert to the admin on every configured channel. Returns the list of channels that worked. */
 function notifyAdmin(string $subject, string $text): array
 {
