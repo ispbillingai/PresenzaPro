@@ -37,11 +37,11 @@ function pageStart(string $title, ?array $user = null, array $opts = []): void
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1f4e79">
+<meta name="theme-color" content="#0786c4">
 <title><?= e($title) ?> · <?= e($company) ?></title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/assets/icon.svg">
+<link rel="icon" href="/assets/brand/icon-72.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/brand/icon-180.png">
 <link rel="stylesheet" href="/assets/css/app.css?v=<?= e(APP_VERSION) ?>">
 <?php if (!empty($opts['leaflet'])): ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
@@ -52,7 +52,7 @@ function pageStart(string $title, ?array $user = null, array $opts = []): void
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="<?= $user ? ($user['role'] === 'admin' ? '/admin/' : '/employee/') : '/login.php' ?>">
-      <img src="/assets/icon.svg" alt="" width="28" height="28"> <?= e($company) ?>
+      <img src="/assets/brand/upgrade-mark.png" alt="Upgrade" width="30" height="30"> <?= e($company) ?>
     </a>
     <?php if ($user): ?>
     <nav class="nav">
@@ -75,7 +75,7 @@ function pageEnd(): void
 {
     ?>
 </main>
-<footer class="footer"><?= e(APP_NAME) ?> <?= e(APP_VERSION) ?></footer>
+<footer class="footer"><span class="powered">powered by <img src="/assets/brand/upgrade-logo.png" alt="Upgrade" width="86" height="28"></span><span class="help"><?= e(APP_NAME) ?> <?= e(APP_VERSION) ?></span></footer>
 </body>
 </html>
 <?php

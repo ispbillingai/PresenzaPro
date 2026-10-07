@@ -107,7 +107,7 @@ pageStart('Sedi', $user, ['leaflet' => $showForm]);
     if (!marker) {
       marker = L.marker([lat, lng], { draggable: true }).addTo(map);
       marker.on('dragend', function () { var p = marker.getLatLng(); place(p.lat, p.lng); });
-      circle = L.circle([lat, lng], { radius: parseInt(rEl.value || '100', 10), color: '#1f4e79', fillOpacity: .12 }).addTo(map);
+      circle = L.circle([lat, lng], { radius: parseInt(rEl.value || '100', 10), color: '#0786c4', fillOpacity: .12 }).addTo(map);
     } else {
       marker.setLatLng([lat, lng]); circle.setLatLng([lat, lng]);
     }

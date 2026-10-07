@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 pageStart('Accedi');
 ?>
 <div class="card login-card">
+  <img src="/assets/brand/upgrade-logo.png" alt="Upgrade" class="login-logo" width="220" height="72">
   <h1>Accedi</h1>
   <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
   <form method="post" autocomplete="on">
