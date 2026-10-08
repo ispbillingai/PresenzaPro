@@ -104,9 +104,23 @@
     var msg = 'Impossibile rilevare la posizione.';
     if (err && err.code === 1) msg = 'Permesso posizione negato. Abilitalo nelle impostazioni del browser e ricarica.';
     else if (err && err.code === 2) msg = 'Posizione non disponibile. Attiva il GPS.';
-    else if (err && err.code === 3) msg = 'Timeout nel rilevamento della posizione. Riprovo…';
+    else if (err && err.code === 3) msg = 'Timeout nel rilevamento della posizione. Nuovo tentativo tra 10 secondi.';
     setGeo('outside', 'Posizione non disponibile', msg);
     updateButtons();
+  }
+
+  var GEO_INTERVAL_MS = 10000;
+  var geoBusy = false;
+  var geoTimer = null;
+
+  function readPosition() {
+    if (geoBusy || document.hidden) return;
+    geoBusy = true;
+    navigator.geolocation.getCurrentPosition(
+      function (pos) { geoBusy = false; onPosition(pos); },
+      function (err) { geoBusy = false; onError(err); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
   }
 
   function startWatch() {
@@ -118,11 +132,10 @@
       setGeo('outside', 'Connessione non sicura', 'La posizione è disponibile solo in HTTPS.');
       return;
     }
-    navigator.geolocation.watchPosition(onPosition, onError, {
-      enableHighAccuracy: true,
-      maximumAge: 5000,
-      timeout: 20000
-    });
+    // One reading now, then one every 10 seconds (paused while the page is hidden).
+    readPosition();
+    geoTimer = setInterval(readPosition, GEO_INTERVAL_MS);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) readPosition(); });
   }
 
   function showResult(ok, text) {
