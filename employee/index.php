@@ -20,6 +20,7 @@ $last = lastAccepted($uid);
 $present = isPresentNow($last);
 $onBreak = isOnBreak($last);
 $onPermit = isOnPermit($last);
+$returnBy = $onPermit ? permitReturnBy($last) : null;
 $todayShift = todayShift($uid);
 $todayHoliday = holidaysBetween(date('Y-m-d'), date('Y-m-d'))[date('Y-m-d')] ?? null;
 $breakEnabled = $todayShift !== null && ($todayShift['break_mode'] ?? 'fixed') === 'clocked';
@@ -61,7 +62,8 @@ pageStart('Timbra', $user);
   <?php endif; ?>
   <div class="clock-state" id="clock-state">
     <?php if ($onPermit): ?>
-      <span class="badge badge-info">Fuori per permesso</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>
+      <span class="badge badge-info">Fuori per permesso</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?><?= $returnBy ? ' · <strong>rientro previsto entro le ' . e($returnBy) . '</strong>' : '' ?>
+      <br><span class="help">Puoi rientrare anche prima: viene conteggiato solo il tempo effettivo fuori.</span>
     <?php elseif ($onBreak): ?>
       <span class="badge badge-warn">In pausa</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>
     <?php elseif ($present): ?>

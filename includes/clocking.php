@@ -41,6 +41,19 @@ function permitCodesToday(int $userId): int
     )['n'] ?? 0);
 }
 
+/** Expected return time ("rientro previsto") for an open clocked permit: start + approved hours. */
+function permitReturnBy(array $permitStartClocking): ?string
+{
+    if (empty($permitStartClocking['request_id'])) {
+        return null;
+    }
+    $req = fetchOne('SELECT hours FROM leave_requests WHERE id = ?', [(int)$permitStartClocking['request_id']]);
+    if (!$req || $req['hours'] === null) {
+        return null;
+    }
+    return date('H:i', strtotime($permitStartClocking['clocked_at']) + (int)round((float)$req['hours'] * 3600));
+}
+
 /** Approved, unused permit request of the user matching the code and valid today. */
 function findPermitByCode(int $userId, ?string $code): ?array
 {
@@ -241,6 +254,8 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
         'clocked_at' => date('Y-m-d H:i:s'),
         'allowed' => $allowed,
         'permit_codes_today' => permitCodesToday($userId),
+        'return_by' => ($status === 'accepted' && $permit && $permit['hours'] !== null) ? date('H:i', time() + (int)round((float)$permit['hours'] * 3600)) : null,
+        'permit_hours' => $permit ? $permit['hours'] : null,
         'next_type' => $allowed[0],
     ];
 }

@@ -217,7 +217,7 @@
         var hm = d.clocked_at.substr(11, 5);
         if (d.type === 'out') stateBox.innerHTML = '<span class="badge badge-out">Non in servizio</span>';
         else if (d.type === 'break_start') stateBox.innerHTML = '<span class="badge badge-warn">In pausa</span> dalle ' + hm;
-        else if (d.type === 'permit_start') stateBox.innerHTML = '<span class="badge badge-info">Fuori per permesso</span> dalle ' + hm;
+        else if (d.type === 'permit_start') stateBox.innerHTML = '<span class="badge badge-info">Fuori per permesso</span> dalle ' + hm + (d.return_by ? ' · <strong>rientro previsto entro le ' + d.return_by + '</strong>' : '') + '<br><span class="help">Puoi rientrare anche prima: viene conteggiato solo il tempo effettivo fuori.</span>';
         else stateBox.innerHTML = '<span class="badge badge-in">In servizio</span>';
         if (navigator.vibrate) navigator.vibrate(80);
       }
