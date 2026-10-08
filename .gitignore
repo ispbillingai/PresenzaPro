@@ -6,3 +6,6 @@ config/database.php
 Thumbs.db
 *.log
 *.stackdump
+
+# Sales material (price list, presentations): never in the public repo
+commerciale/
