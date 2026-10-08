@@ -31,6 +31,16 @@ function generatePermitCode(): string
     return $code;
 }
 
+/** Number of approved, unused permit codes valid today for the user. */
+function permitCodesToday(int $userId): int
+{
+    return (int)(fetchOne(
+        'SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND status = "approved" AND permit_code IS NOT NULL
+         AND type IN ("permesso", "permesso_servizio") AND permit_used_at IS NULL AND date_from <= CURDATE() AND date_to >= CURDATE()',
+        [$userId]
+    )['n'] ?? 0);
+}
+
 /** Approved, unused permit request of the user matching the code and valid today. */
 function findPermitByCode(int $userId, ?string $code): ?array
 {
@@ -230,6 +240,7 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
         'location' => $matched ? $matched['name'] : null,
         'clocked_at' => date('Y-m-d H:i:s'),
         'allowed' => $allowed,
+        'permit_codes_today' => permitCodesToday($userId),
         'next_type' => $allowed[0],
     ];
 }

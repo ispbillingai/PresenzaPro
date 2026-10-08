@@ -49,7 +49,8 @@ pageStart('Timbra', $user);
      data-labels="<?= e(json_encode(CLOCK_TYPE_LABELS, JSON_UNESCAPED_UNICODE)) ?>"
      data-csrf="<?= e(csrfToken()) ?>"
      data-max-accuracy="<?= e(setting('max_accuracy_m', '150')) ?>"
-     data-locations="<?= e($locJson) ?>">
+     data-locations="<?= e($locJson) ?>"
+     data-permit-codes="<?= permitCodesToday($uid) ?>">
   <div class="clock-time" id="clock-time">--:--</div>
   <div class="clock-date"><?= e(ucfirst(strftime_it(time()))) ?></div>
   <p style="margin:0 0 .5rem">Ciao <strong><?= e($user['full_name']) ?></strong></p>
@@ -118,5 +119,22 @@ pageStart('Timbra', $user);
 </div>
 <?php endif; ?>
 
+<div class="modal-backdrop" id="permit-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="permit-title">
+    <h2 id="permit-title">Uscita per permesso</h2>
+    <div id="permit-nocode" class="alert alert-error" hidden>Non hai nessun codice permesso valido per oggi. Chiedi al responsabile di approvare un permesso: riceverai il codice da inserire qui.</div>
+    <div id="permit-form">
+      <label>Codice del permesso approvato
+        <input type="text" id="permit-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="es. A7K2PX" style="text-transform:uppercase;letter-spacing:.15em;font-size:1.3rem;text-align:center">
+      </label>
+      <div id="permit-error" class="alert alert-error" hidden></div>
+      <p class="help" style="margin:0 0 .75rem">Il codice vale per una sola uscita. Per il rientro non serve.</p>
+    </div>
+    <div class="actions" style="justify-content:flex-end">
+      <button type="button" class="btn" id="permit-cancel">Annulla</button>
+      <button type="button" class="btn btn-primary" id="permit-confirm">Conferma uscita</button>
+    </div>
+  </div>
+</div>
 <script src="/assets/js/clock.js?v=<?= e(APP_VERSION) ?>"></script>
 <?php pageEnd(); ?>

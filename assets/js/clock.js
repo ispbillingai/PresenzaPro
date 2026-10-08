@@ -158,15 +158,43 @@
     list.insertBefore(li, list.firstChild);
   }
 
-  function send(type) {
+  // ----- Permit code dialog (in-app, no browser prompt) -----
+  var permitCodes = parseInt(root.dataset.permitCodes || '0', 10);
+  var modal = document.getElementById('permit-modal');
+  var permitInput = document.getElementById('permit-code');
+  var permitError = document.getElementById('permit-error');
+  var permitNoCode = document.getElementById('permit-nocode');
+  var permitForm = document.getElementById('permit-form');
+  var permitConfirm = document.getElementById('permit-confirm');
+
+  function openPermitDialog() {
+    permitError.hidden = true;
+    permitError.textContent = '';
+    permitInput.value = '';
+    var none = permitCodes <= 0;
+    permitNoCode.hidden = !none;
+    permitForm.hidden = none;
+    permitConfirm.hidden = none;
+    modal.hidden = false;
+    if (!none) setTimeout(function () { permitInput.focus(); }, 50);
+  }
+  function closePermitDialog() { modal.hidden = true; }
+  function permitFail(text) { permitError.textContent = text; permitError.hidden = false; }
+
+  document.getElementById('permit-cancel').addEventListener('click', closePermitDialog);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closePermitDialog(); });
+  permitConfirm.addEventListener('click', function () {
+    var code = permitInput.value.trim().toUpperCase();
+    if (!code) { permitFail('Inserisci il codice del permesso.'); return; }
+    if (!/^[A-Z0-9]{6}$/.test(code)) { permitFail('Il codice è di 6 lettere o cifre.'); return; }
+    closePermitDialog();
+    send('permit_start', code);
+  });
+  permitInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') permitConfirm.click(); });
+
+  function send(type, code) {
     if (!fix || sending) return;
-    var code = null;
-    if (type === 'permit_start') {
-      code = window.prompt('Inserisci il codice del permesso approvato (6 caratteri):', '');
-      if (code === null) return;
-      code = code.trim().toUpperCase();
-      if (!code) { showResult(false, 'Serve il codice del permesso per uscire.'); return; }
-    }
+    if (type === 'permit_start' && !code) { openPermitDialog(); return; }
     sending = true;
     updateButtons();
     resultBox.innerHTML = '';
@@ -184,6 +212,7 @@
       showResult(!!d.ok, d.message || (d.ok ? 'Registrata.' : 'Rifiutata.'));
       if (d.clocked_at) prependToday(d);
       if (d.allowed && d.allowed.length) { allowed = d.allowed; renderButtons(); }
+      if (typeof d.permit_codes_today === 'number') permitCodes = d.permit_codes_today;
       if (d.ok) {
         var hm = d.clocked_at.substr(11, 5);
         if (d.type === 'out') stateBox.innerHTML = '<span class="badge badge-out">Non in servizio</span>';
