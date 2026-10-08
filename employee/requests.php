@@ -97,6 +97,7 @@ pageStart('Richieste', $user);
       <label>Ore <span class="help">(solo permesso parziale)</span> <input type="text" name="hours" inputmode="decimal" placeholder="es. 2"></label>
     </div>
     <label>Motivo / nota <input type="text" name="note" maxlength="255"></label>
+    <p class="help">Per i permessi a ore: una volta approvato riceverai un codice da inserire quando premi "Uscita per permesso". Il rientro non richiede codice. Ogni codice vale una sola uscita.</p>
     <div class="actions">
       <button class="btn btn-primary" type="submit">Invia richiesta</button>
       <a class="btn" href="/employee/requests.php">Annulla</a>
@@ -117,6 +118,10 @@ pageStart('Richieste', $user);
           <?= $r['hours'] !== null ? '· ' . e(fmtHoursDec((float)$r['hours'])) . ' h' : '' ?>
           <?= $r['note'] ? '<br><span class="help">' . e($r['note']) . '</span>' : '' ?>
           <?= $r['admin_note'] ? '<br><span class="help">Risposta: ' . e($r['admin_note']) . '</span>' : '' ?>
+          <?php if ($r['permit_code'] && $r['status'] === 'approved'): ?>
+            <br><span class="permit-code">Codice permesso: <strong><?= e($r['permit_code']) ?></strong></span>
+            <?= $r['permit_used_at'] ? '<span class="badge badge-off">usato ' . e(fmtDate($r['permit_used_at'], 'd/m H:i')) . '</span>' : ($r['date_to'] < date('Y-m-d') ? '<span class="badge badge-off">scaduto</span>' : '<span class="help">da inserire quando premi "Uscita per permesso"</span>') ?>
+          <?php endif; ?>
         </span>
         <span>
           <span class="badge <?= ['pending' => 'badge-warn', 'approved' => 'badge-ok', 'rejected' => 'badge-rej'][$r['status']] ?>"><?= e(REQUEST_STATUS_LABELS[$r['status']]) ?></span>

@@ -217,9 +217,10 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
     $overtimeMin = (int)(setting('overtime_min_minutes', '15') ?: 15);
 
     $rows = fetchAll(
-        'SELECT user_id, type, clocked_at FROM clockings
-         WHERE status = "accepted" AND DATE(clocked_at) BETWEEN ? AND ?' . ($userId ? ' AND user_id = ' . (int)$userId : '') . '
-         ORDER BY user_id, clocked_at, id',
+        'SELECT c.user_id, c.type, c.clocked_at, lr.type AS permit_type FROM clockings c
+         LEFT JOIN leave_requests lr ON lr.id = c.request_id
+         WHERE c.status = "accepted" AND DATE(c.clocked_at) BETWEEN ? AND ?' . ($userId ? ' AND c.user_id = ' . (int)$userId : '') . '
+         ORDER BY c.user_id, c.clocked_at, c.id',
         [$from, $to]
     );
     $sessions = buildWorkSessions($rows);
@@ -247,7 +248,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
 
             $day = [
                 'date' => $d, 'weekday' => $wd, 'shift' => $shift, 'override' => $override, 'holiday' => $holiday, 'absence' => $ab,
-                'expected_min' => 0, 'worked_min' => $worked, 'break_min' => $s['break_min'] ?? 0, 'permit_min' => $s['permit_min'] ?? 0,
+                'expected_min' => 0, 'worked_min' => $worked, 'break_min' => $s['break_min'] ?? 0, 'permit_min' => $s['permit_min'] ?? 0, 'service_min' => $s['service_min'] ?? 0,
                 'first_in' => $s['first_in'] ?? null, 'last_out' => $s['last_out'] ?? null, 'open' => $s['open'] ?? false,
                 'late_min' => 0, 'early_min' => 0, 'overtime_min' => 0, 'status' => 'rest', 'flags' => [],
             ];
@@ -257,16 +258,18 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
                 $expected = shiftMinutes($shift);
                 $t['days_scheduled']++;
             }
-            if ($ab) {
+            // A clocked permit (uscita/rientro con codice) replaces the planned hours of a permit absence.
+            $clockedPermit = (int)$day['permit_min'] + (int)$day['service_min'];
+            $absenceCounts = $ab && !($clockedPermit > 0 && $ab['hours'] !== null && in_array($ab['type'], PERMIT_TYPES, true));
+            if ($ab && $absenceCounts) {
                 if ($ab['hours'] === null) {
                     $expected = 0;
                 } else {
                     $expected = max(0, $expected - (int)round((float)$ab['hours'] * 60));
                 }
             }
-            // Clocked permit (uscita/rientro per permesso): the time away is a personal permit.
-            if ($day['permit_min'] > 0) {
-                $expected = max(0, $expected - (int)$day['permit_min']);
+            if ($clockedPermit > 0) {
+                $expected = max(0, $expected - $clockedPermit);
             }
             $day['expected_min'] = $expected;
 
@@ -315,11 +318,14 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             if ($day['open'] && $d < $today) {
                 $day['flags'][] = 'uscita mancante';
             }
-            if ($ab && $ab['hours'] !== null) {
+            if ($ab && $ab['hours'] !== null && $absenceCounts) {
                 $day['flags'][] = mb_strtolower(absenceLabel($ab['type'])) . ' ' . fmtHoursDec((float)$ab['hours']) . ' h';
             }
             if ($day['permit_min'] > 0) {
                 $day['flags'][] = 'permesso timbrato ' . (int)$day['permit_min'] . ' min';
+            }
+            if ($day['service_min'] > 0) {
+                $day['flags'][] = 'permesso servizio timbrato ' . (int)$day['service_min'] . ' min';
             }
             if ($override) {
                 $day['flags'][] = $override['shift'] ? 'turno modificato' : 'riposo pianificato';
@@ -329,6 +335,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             $t['worked_min'] += $worked;
             $t['break_min'] += $day['break_min'];
             $t['permesso_min'] += (int)$day['permit_min'];
+            $t['servizio_min'] += (int)$day['service_min'];
             $t['planned_min'] += $expected;
             if ($d <= $today) {
                 $t['expected_min'] += $expected;
@@ -344,7 +351,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             if ($day['status'] === 'ferie') { $d > $today ? $t['days_ferie_future']++ : $t['days_ferie']++; }
             if ($day['status'] === 'malattia') $t['days_malattia']++;
             if ($day['status'] === 'altro') $t['days_altro']++;
-            if ($ab && ($ab['type'] === 'permesso' || $ab['type'] === 'permesso_servizio') && $scheduled) {
+            if ($ab && $absenceCounts && ($ab['type'] === 'permesso' || $ab['type'] === 'permesso_servizio') && $scheduled) {
                 $mins = $ab['hours'] !== null ? (int)round((float)$ab['hours'] * 60) : shiftMinutes($shift);
                 $t[$ab['type'] === 'permesso' ? 'permesso_min' : 'servizio_min'] += $mins;
             }

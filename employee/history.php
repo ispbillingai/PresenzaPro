@@ -74,6 +74,7 @@ if ($report) {
       <?php if ($d['worked_min']): ?><span class="badge badge-ok"><?= e(fmtMinutes((int)$d['worked_min'])) ?></span><?php endif; ?>
       <?php if ($d['break_min']): ?><span class="badge badge-off">pausa <?= (int)$d['break_min'] ?> min</span><?php endif; ?>
       <?php if ($d['permit_min']): ?><span class="badge badge-info">permesso <?= (int)$d['permit_min'] ?> min</span><?php endif; ?>
+      <?php if ($d['service_min']): ?><span class="badge badge-info">perm. servizio <?= (int)$d['service_min'] ?> min</span><?php endif; ?>
       <?php foreach ($d['flags'] as $f): ?><span class="badge <?= str_starts_with($f, 'straord') ? 'badge-ok' : 'badge-warn' ?>"><?= e($f) ?></span><?php endforeach; ?>
     </span>
   </h2>

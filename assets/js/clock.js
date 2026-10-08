@@ -147,6 +147,13 @@
 
   function send(type) {
     if (!fix || sending) return;
+    var code = null;
+    if (type === 'permit_start') {
+      code = window.prompt('Inserisci il codice del permesso approvato (6 caratteri):', '');
+      if (code === null) return;
+      code = code.trim().toUpperCase();
+      if (!code) { showResult(false, 'Serve il codice del permesso per uscire.'); return; }
+    }
     sending = true;
     updateButtons();
     resultBox.innerHTML = '';
@@ -154,7 +161,7 @@
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-      body: JSON.stringify({ type: type, lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, fix_ts: fix.ts })
+      body: JSON.stringify({ type: type, lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, fix_ts: fix.ts, code: code })
     }).then(function (res) {
       return res.json().then(function (data) { return { status: res.status, data: data }; });
     }).then(function (r) {

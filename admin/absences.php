@@ -13,6 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
 
     if ($action === 'delete') {
+        $abRow = fetchOne('SELECT * FROM absences WHERE id = ?', [(int)($_POST['id'] ?? 0)]);
+        if ($abRow && $abRow['request_id']) {
+            q('UPDATE leave_requests SET status = "rejected", admin_note = "Giustificativo eliminato", permit_code = NULL WHERE id = ? AND permit_used_at IS NULL', [(int)$abRow['request_id']]);
+        }
         q('DELETE FROM absences WHERE id = ?', [(int)($_POST['id'] ?? 0)]);
         flash('ok', 'Giustificativo eliminato.');
         redirect('/admin/absences.php?m=' . e((string)($_POST['m'] ?? date('Y-m'))));
@@ -28,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $note = trim((string)($_POST['note'] ?? '')) ?: null;
         $errors = [];
         if (!$uid || !fetchOne('SELECT id FROM users WHERE id = ? AND role = "employee"', [$uid])) $errors[] = 'Seleziona un dipendente.';
+        if (in_array($type, PERMIT_TYPES, true) && $hours === null && $from !== $to) $errors[] = 'Un permesso vale per un solo giorno: per più giorni usa Ferie o Altro.';
         if ($type === '') $errors[] = 'Seleziona il tipo.';
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) || $to < $from) $errors[] = 'Date non valide.';
         if ($hours !== null && ($hours <= 0 || $hours > 24)) $errors[] = 'Le ore devono essere tra 0 e 24.';
@@ -36,9 +41,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($errors as $m) flash('error', $m);
             redirect('/admin/absences.php?new=1');
         }
-        q('INSERT INTO absences (user_id, type, date_from, date_to, hours, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [$uid, $type, $from, $to, $hours, $note, (int)$user['id']]);
-        flash('ok', 'Giustificativo registrato.');
+        $requestId = null;
+        $code = null;
+        if (in_array($type, PERMIT_TYPES, true)) {
+            $code = generatePermitCode();
+            q('INSERT INTO leave_requests (user_id, type, date_from, date_to, hours, note, status, admin_note, permit_code, decided_by, decided_at)
+               VALUES (?, ?, ?, ?, ?, ?, "approved", "Inserito dal responsabile", ?, ?, NOW())',
+                [$uid, $type, $from, $to, $hours, $note, $code, (int)$user['id']]);
+            $requestId = (int)db()->lastInsertId();
+        }
+        q('INSERT INTO absences (user_id, type, date_from, date_to, hours, note, created_by, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$uid, $type, $from, $to, $hours, $note, (int)$user['id'], $requestId]);
+        if ($code) {
+            require_once dirname(__DIR__) . '/includes/notify.php';
+            $emp = fetchOne('SELECT * FROM users WHERE id = ?', [$uid]);
+            $company = setting('company_name', APP_NAME) ?: APP_NAME;
+            $sent = setting('notify_requests', '1') !== '0'
+                ? notifyEmployee($emp, 'Permesso registrato - ' . $company, sprintf("Ciao %s, è stato registrato per te: %s.\nCodice permesso: %s (inseriscilo quando premi \"Uscita per permesso\"; il rientro non lo richiede).\n%s", $emp['full_name'], requestSummary(fetchOne('SELECT * FROM leave_requests WHERE id = ?', [$requestId])), $code, $company))
+                : [];
+            flash('ok', 'Giustificativo registrato. Codice permesso: ' . $code . ($sent ? ' (inviato al dipendente via ' . implode(' e ', $sent) . ')' : '') . '.');
+        } else {
+            flash('ok', 'Giustificativo registrato.');
+        }
         redirect('/admin/absences.php?m=' . substr($from, 0, 7));
     }
 }

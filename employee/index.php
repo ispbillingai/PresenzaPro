@@ -80,7 +80,7 @@ pageStart('Timbra', $user);
     <?php endforeach; ?>
   </div>
 
-  <p class="help" id="permit-help" style="margin:.6rem 0 0">"Uscita per permesso": il tempo fuori viene scalato dalle ore lavorate e conteggiato come permesso personale. Al rientro premi "Rientro da permesso".</p>
+  <p class="help" id="permit-help" style="margin:.6rem 0 0">"Uscita per permesso" chiede il codice ricevuto con l'approvazione del permesso di oggi (personale o per servizio). Al rientro premi "Rientro da permesso", senza codice.</p>
   <div class="geo-status waiting" id="geo-status">
     <strong>Rilevamento posizione…</strong>
     <small>Consenti l'accesso alla posizione quando richiesto.</small>

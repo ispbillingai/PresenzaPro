@@ -18,17 +18,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         q('UPDATE leave_requests SET status = ?, admin_note = ?, decided_by = ?, decided_at = NOW() WHERE id = ?',
             [$action === 'approve' ? 'approved' : 'rejected', $adminNote, (int)$user['id'], $id]);
+        $code = null;
         if ($action === 'approve') {
             q('INSERT INTO absences (user_id, type, date_from, date_to, hours, note, created_by, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 [(int)$r['user_id'], $r['type'], $r['date_from'], $r['date_to'], $r['hours'], $r['note'], (int)$user['id'], $id]);
+            if (in_array($r['type'], PERMIT_TYPES, true)) {
+                $code = generatePermitCode();
+                q('UPDATE leave_requests SET permit_code = ? WHERE id = ?', [$code, $id]);
+            }
         }
         $pdo->commit();
         $emp = fetchOne('SELECT * FROM users WHERE id = ?', [(int)$r['user_id']]);
         $company = setting('company_name', APP_NAME) ?: APP_NAME;
-        $text = sprintf("Ciao %s, la tua richiesta %s è stata %s.%s\n%s", $emp['full_name'], requestSummary($r),
-            $action === 'approve' ? 'APPROVATA' : 'RIFIUTATA', $adminNote ? "\nNota: " . $adminNote : '', $company);
+        $text = sprintf("Ciao %s, la tua richiesta %s è stata %s.%s%s\n%s", $emp['full_name'], requestSummary($r),
+            $action === 'approve' ? 'APPROVATA' : 'RIFIUTATA', $adminNote ? "\nNota: " . $adminNote : '',
+            $code ? "\nCodice permesso: " . $code . " (inseriscilo quando premi \"Uscita per permesso\"; il rientro non lo richiede)" : '', $company);
         $sent = setting('notify_requests', '1') !== '0' ? notifyEmployee($emp, ($action === 'approve' ? 'Richiesta approvata' : 'Richiesta rifiutata') . ' - ' . $company, $text) : [];
-        flash('ok', ($action === 'approve' ? 'Richiesta approvata e registrata tra le assenze.' : 'Richiesta rifiutata.')
+        flash('ok', ($action === 'approve' ? 'Richiesta approvata e registrata tra le assenze.' . ($code ? ' Codice permesso: ' . $code . '.' : '') : 'Richiesta rifiutata.')
             . ($sent ? ' Dipendente avvisato via ' . implode(' e ', $sent) . '.' : ' Nessun avviso inviato al dipendente (serve il cellulare con la chiave WhatsApp in Impostazioni, o l\'email).'));
     }
     redirect('/admin/requests.php' . (($_POST['show'] ?? '') === 'all' ? '?show=all' : ''));
@@ -61,7 +67,7 @@ pageStart('Richieste', $user);
         <td><span class="badge <?= $r['type'] === 'malattia' ? 'badge-warn' : 'badge-info' ?>"><?= e(absenceLabel($r['type'])) ?></span></td>
         <td style="white-space:nowrap"><?= e(fmtDate($r['date_from'], 'd/m/Y')) ?><?= $r['date_to'] !== $r['date_from'] ? ' - ' . e(fmtDate($r['date_to'], 'd/m/Y')) : '' ?></td>
         <td class="num"><?= $r['hours'] !== null ? e(fmtHoursDec((float)$r['hours'])) . ' h' : 'giornata' ?></td>
-        <td class="help"><?= e($r['note'] ?? '') ?><?= $r['admin_note'] ? '<br>Risposta: ' . e($r['admin_note']) : '' ?></td>
+        <td class="help"><?= e($r['note'] ?? '') ?><?= $r['admin_note'] ? '<br>Risposta: ' . e($r['admin_note']) : '' ?><?= $r['permit_code'] ? '<br>Codice: <strong>' . e($r['permit_code']) . '</strong>' . ($r['permit_used_at'] ? ' <span class="badge badge-off">usato ' . e(fmtDate($r['permit_used_at'], 'd/m H:i')) . '</span>' : '') : '' ?></td>
         <td>
           <span class="badge <?= ['pending' => 'badge-warn', 'approved' => 'badge-ok', 'rejected' => 'badge-rej'][$r['status']] ?>"><?= e(REQUEST_STATUS_LABELS[$r['status']]) ?></span>
           <?= $r['admin_name'] ? '<br><span class="help">' . e($r['admin_name']) . ' ' . e(fmtDate($r['decided_at'], 'd/m H:i')) . '</span>' : '' ?>
