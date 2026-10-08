@@ -82,7 +82,7 @@ function buildTimecardPdf(int $uid, string $month): ?string
             elseif ($f === 'uscita anticipata') $notes[] = 'usc. ant. ' . $d['early_min'] . "'";
             elseif ($f === 'straordinario') $notes[] = 'straord. ' . $d['overtime_min'] . "'";
             elseif ($f === 'uscita mancante') $notes[] = 'uscita mancante';
-            elseif (str_starts_with($f, 'permesso')) $notes[] = str_replace(['permesso personale', 'permesso per servizio'], ['perm. pers.', 'perm. serv.'], $f);
+            elseif (str_starts_with($f, 'permesso')) $notes[] = str_replace(['permesso personale', 'permesso per servizio', 'permesso timbrato'], ['perm. pers.', 'perm. serv.', 'perm. timbrato'], $f);
             elseif ($f === 'turno modificato') $notes[] = 'turno mod.';
             elseif ($f === 'riposo pianificato') $notes[] = 'riposo pian.';
             else $notes[] = $f;

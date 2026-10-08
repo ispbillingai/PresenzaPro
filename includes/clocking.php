@@ -20,6 +20,8 @@ const CLOCK_TYPE_LABELS = [
     'out' => 'Uscita',
     'break_start' => 'Inizio pausa',
     'break_end' => 'Fine pausa',
+    'permit_start' => 'Uscita per permesso',
+    'permit_end' => 'Rientro da permesso',
 ];
 
 function rejectLabel(?string $reason): string
@@ -57,7 +59,7 @@ function lastAccepted(int $userId): ?array
 function allowedNextTypes(?array $last, bool $breakEnabled): array
 {
     $lastType = $last['type'] ?? null;
-    if ($last && substr($last['clocked_at'], 0, 10) !== date('Y-m-d') && $lastType !== 'in' && $lastType !== 'break_start' && $lastType !== 'break_end') {
+    if ($last && substr($last['clocked_at'], 0, 10) !== date('Y-m-d') && $lastType === 'out') {
         $lastType = null;
     }
     if ($lastType === null || $lastType === 'out') {
@@ -66,7 +68,10 @@ function allowedNextTypes(?array $last, bool $breakEnabled): array
     if ($lastType === 'break_start') {
         return ['break_end'];
     }
-    return $breakEnabled ? ['out', 'break_start'] : ['out'];
+    if ($lastType === 'permit_start') {
+        return ['permit_end'];
+    }
+    return $breakEnabled ? ['out', 'break_start', 'permit_start'] : ['out', 'permit_start'];
 }
 
 /** Primary next type ("in" or "out"), kept for compatibility. */
@@ -84,6 +89,11 @@ function isPresentNow(?array $last): bool
 function isOnBreak(?array $last): bool
 {
     return $last && $last['type'] === 'break_start' && substr($last['clocked_at'], 0, 10) === date('Y-m-d');
+}
+
+function isOnPermit(?array $last): bool
+{
+    return $last && $last['type'] === 'permit_start' && substr($last['clocked_at'], 0, 10) === date('Y-m-d');
 }
 
 /**
@@ -194,7 +204,9 @@ function buildWorkSessions(array $rows): array
     $open = [];       // user_id => clocked_at of the open "in"
     $breakStart = []; // user_id => clocked_at of an open break
     $breakMin = [];   // user_id => break minutes accumulated in the open session
-    $blank = ['minutes' => 0, 'break_min' => 0, 'first_in' => null, 'last_out' => null, 'open' => false, 'entries' => 0];
+    $permitStart = []; // user_id => clocked_at of an open clocked permit
+    $permitMin = [];  // user_id => permit minutes accumulated in the open session
+    $blank = ['minutes' => 0, 'break_min' => 0, 'permit_min' => 0, 'first_in' => null, 'last_out' => null, 'open' => false, 'entries' => 0];
     foreach ($rows as $r) {
         $uid = (int)$r['user_id'];
         $day = substr($r['clocked_at'], 0, 10);
@@ -210,6 +222,8 @@ function buildWorkSessions(array $rows): array
             $open[$uid] = $r['clocked_at'];
             $breakStart[$uid] = null;
             $breakMin[$uid] = 0;
+            $permitStart[$uid] = null;
+            $permitMin[$uid] = 0;
             $out[$uid][$day]['entries']++;
             $out[$uid][$day]['first_in'] = $out[$uid][$day]['first_in'] ?? $r['clocked_at'];
             $out[$uid][$day]['open'] = true;
@@ -222,20 +236,35 @@ function buildWorkSessions(array $rows): array
                 $breakMin[$uid] += max(0, (int)round(($ts - strtotime($breakStart[$uid])) / 60));
                 $breakStart[$uid] = null;
             }
+        } elseif ($r['type'] === 'permit_start') {
+            if (isset($open[$uid]) && empty($permitStart[$uid])) {
+                $permitStart[$uid] = $r['clocked_at'];
+            }
+        } elseif ($r['type'] === 'permit_end') {
+            if (isset($open[$uid]) && !empty($permitStart[$uid])) {
+                $permitMin[$uid] += max(0, (int)round(($ts - strtotime($permitStart[$uid])) / 60));
+                $permitStart[$uid] = null;
+            }
         } elseif ($r['type'] === 'out' && isset($open[$uid])) {
             if (!empty($breakStart[$uid])) {
                 $breakMin[$uid] += max(0, (int)round(($ts - strtotime($breakStart[$uid])) / 60));
                 $breakStart[$uid] = null;
             }
+            if (!empty($permitStart[$uid])) {
+                $permitMin[$uid] += max(0, (int)round(($ts - strtotime($permitStart[$uid])) / 60));
+                $permitStart[$uid] = null;
+            }
             $inDay = substr($open[$uid], 0, 10);
             $mins = (int)round(($ts - strtotime($open[$uid])) / 60);
             $d = &$out[$uid][$inDay];
-            $d['minutes'] += max(0, $mins - $breakMin[$uid]);
+            $d['minutes'] += max(0, $mins - $breakMin[$uid] - $permitMin[$uid]);
             $d['break_min'] += $breakMin[$uid];
+            $d['permit_min'] += $permitMin[$uid];
             $d['last_out'] = $r['clocked_at'];
             $d['open'] = false;
             unset($d, $open[$uid]);
             $breakMin[$uid] = 0;
+            $permitMin[$uid] = 0;
         }
     }
     return $out;

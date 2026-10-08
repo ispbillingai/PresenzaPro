@@ -4,11 +4,13 @@ require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
 
-function strftime_it(int $ts): string
-{
-    $days = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
-    $months = ['', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-    return $days[(int)date('w', $ts)] . ' ' . date('j', $ts) . ' ' . $months[(int)date('n', $ts)] . ' ' . date('Y', $ts);
+if (!function_exists('strftime_it')) {
+    function strftime_it(int $ts): string
+    {
+        $days = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+        $months = ['', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+        return $days[(int)date('w', $ts)] . ' ' . date('j', $ts) . ' ' . $months[(int)date('n', $ts)] . ' ' . date('Y', $ts);
+    }
 }
 
 $user = requireRole('employee');
@@ -17,6 +19,7 @@ $locations = userLocations($uid);
 $last = lastAccepted($uid);
 $present = isPresentNow($last);
 $onBreak = isOnBreak($last);
+$onPermit = isOnPermit($last);
 $todayShift = todayShift($uid);
 $todayHoliday = holidaysBetween(date('Y-m-d'), date('Y-m-d'))[date('Y-m-d')] ?? null;
 $breakEnabled = $todayShift !== null && ($todayShift['break_mode'] ?? 'fixed') === 'clocked';
@@ -56,7 +59,9 @@ pageStart('Timbra', $user);
     <p class="help" style="margin:0 0 .5rem">Turno di oggi: <strong><?= e(substr($todayShift['start_time'], 0, 5)) ?> - <?= e(substr($todayShift['end_time'], 0, 5)) ?></strong> (<?= e($todayShift['name']) ?>)<?= $breakEnabled ? ' · pausa da timbrare' : '' ?></p>
   <?php endif; ?>
   <div class="clock-state" id="clock-state">
-    <?php if ($onBreak): ?>
+    <?php if ($onPermit): ?>
+      <span class="badge badge-info">Fuori per permesso</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>
+    <?php elseif ($onBreak): ?>
       <span class="badge badge-warn">In pausa</span> dalle <?= e(fmtDate($last['clocked_at'], 'H:i')) ?>
     <?php elseif ($present): ?>
       <span class="badge badge-in">In servizio</span>
@@ -75,6 +80,7 @@ pageStart('Timbra', $user);
     <?php endforeach; ?>
   </div>
 
+  <p class="help" id="permit-help" style="margin:.6rem 0 0">"Uscita per permesso": il tempo fuori viene scalato dalle ore lavorate e conteggiato come permesso personale. Al rientro premi "Rientro da permesso".</p>
   <div class="geo-status waiting" id="geo-status">
     <strong>Rilevamento posizione…</strong>
     <small>Consenti l'accesso alla posizione quando richiesto.</small>

@@ -41,6 +41,8 @@ h1:first-child, h2:first-child { margin-top: 0; }
 .plan-grid .ov { background: #fff3cd; font-weight: 700; }
 .btn-clock.secondary { background: var(--warn); font-size: 1.05rem; padding: .8rem 1rem; margin-top: .6rem; }
 .btn-clock.break_end { background: var(--brand); }
+.btn-clock.permit_start { background: #5b6b7f; }
+.btn-clock.permit_end { background: var(--brand); }
 
 .container { max-width: 1080px; margin: 0 auto; padding: 1rem; width: 100%; flex: 1; }
 .footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 1rem; display: flex; flex-direction: column; align-items: center; gap: .3rem; }

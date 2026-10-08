@@ -116,6 +116,8 @@ pageStart('Timbrature', $user);
           <option value="out" <?= ($_GET['type'] ?? '') === 'out' ? 'selected' : '' ?>>Uscita</option>
           <option value="break_start">Inizio pausa</option>
           <option value="break_end">Fine pausa</option>
+          <option value="permit_start">Uscita per permesso</option>
+          <option value="permit_end">Rientro da permesso</option>
         </select>
       </label>
       <label>Data <input type="date" name="date" required value="<?= e(preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date'] ?? '')) ? $_GET['date'] : date('Y-m-d')) ?>"></label>

@@ -247,7 +247,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
 
             $day = [
                 'date' => $d, 'weekday' => $wd, 'shift' => $shift, 'override' => $override, 'holiday' => $holiday, 'absence' => $ab,
-                'expected_min' => 0, 'worked_min' => $worked, 'break_min' => $s['break_min'] ?? 0,
+                'expected_min' => 0, 'worked_min' => $worked, 'break_min' => $s['break_min'] ?? 0, 'permit_min' => $s['permit_min'] ?? 0,
                 'first_in' => $s['first_in'] ?? null, 'last_out' => $s['last_out'] ?? null, 'open' => $s['open'] ?? false,
                 'late_min' => 0, 'early_min' => 0, 'overtime_min' => 0, 'status' => 'rest', 'flags' => [],
             ];
@@ -263,6 +263,10 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
                 } else {
                     $expected = max(0, $expected - (int)round((float)$ab['hours'] * 60));
                 }
+            }
+            // Clocked permit (uscita/rientro per permesso): the time away is a personal permit.
+            if ($day['permit_min'] > 0) {
+                $expected = max(0, $expected - (int)$day['permit_min']);
             }
             $day['expected_min'] = $expected;
 
@@ -314,6 +318,9 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             if ($ab && $ab['hours'] !== null) {
                 $day['flags'][] = mb_strtolower(absenceLabel($ab['type'])) . ' ' . fmtHoursDec((float)$ab['hours']) . ' h';
             }
+            if ($day['permit_min'] > 0) {
+                $day['flags'][] = 'permesso timbrato ' . (int)$day['permit_min'] . ' min';
+            }
             if ($override) {
                 $day['flags'][] = $override['shift'] ? 'turno modificato' : 'riposo pianificato';
             }
@@ -321,6 +328,7 @@ function attendanceReport(string $from, string $to, ?int $userId = null, bool $a
             // Totals
             $t['worked_min'] += $worked;
             $t['break_min'] += $day['break_min'];
+            $t['permesso_min'] += (int)$day['permit_min'];
             $t['planned_min'] += $expected;
             if ($d <= $today) {
                 $t['expected_min'] += $expected;

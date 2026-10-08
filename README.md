@@ -42,6 +42,9 @@ telefono (`includes/webhook.php`), esito in `webhook_log`, bottone di prova nell
 - **Export paghe** (`admin/export-payroll.php`): CSV giornaliero per causale (ORD, STR, FER, PER, MAL,
   PSE, ALT, ASS, RIT) o totali mensili per dipendente. `permesso` = personale (scala il monte ore
   permessi), `permesso_servizio` = per servizio (giustifica le ore, non scala nulla).
+- **Permesso timbrato**: pulsanti "Uscita per permesso" / "Rientro da permesso" (tipi `permit_start`/`permit_end`,
+  sempre disponibili quando si è in servizio): il tempo fuori è scalato dalle ore lavorate e dalle ore previste
+  e conteggiato come permesso personale (quindi scala il monte ore).
 - **Pausa timbrata**: fascia con `break_mode = clocked` → il dipendente timbra inizio/fine pausa
   (tipi `break_start`/`break_end`), le ore lavorate escludono la pausa reale.
 - **Pianificazione per data** (`admin/schedule.php`): eccezioni all'orario settimanale (turno diverso o

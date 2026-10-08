@@ -6,7 +6,7 @@ declare(strict_types=1);
 
 define('APP_ROOT', dirname(__DIR__));
 define('APP_NAME', 'PresenzaPro');
-define('APP_VERSION', '0.2.0');
+define('APP_VERSION', '0.3.0');
 
 date_default_timezone_set('Europe/Rome');
 mb_internal_encoding('UTF-8');
