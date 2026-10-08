@@ -250,6 +250,32 @@ pageStart('Dipendenti', $user);
 
 <?php if ($editing): $wlog = fetchAll('SELECT * FROM webhook_log WHERE user_id = ? ORDER BY id DESC LIMIT 8', [(int)$editing['id']]); ?>
 <div class="card">
+  <h2>Dispositivi usati per timbrare</h2>
+  <?php $devs = fetchAll('SELECT * FROM devices WHERE user_id = ? ORDER BY last_seen DESC', [(int)$editing['id']]); ?>
+  <?php if (!$devs): ?><span class="help">Nessuna timbratura dal telefono ancora.</span><?php endif; ?>
+  <?php if ($devs): ?>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Codice</th><th>Dispositivo</th><th>Ultimo IP</th><th>Prima volta</th><th>Ultima volta</th><th class="num">Timbrature</th></tr></thead>
+      <tbody>
+      <?php foreach ($devs as $dv): ?>
+        <tr>
+          <td class="coords" title="<?= e($dv['device_id']) ?>"><?= e(substr($dv['device_id'], 0, 8)) ?></td>
+          <td><?= e($dv['platform'] ?? '') ?><br><span class="help" style="word-break:break-all"><?= e(mb_substr((string)$dv['user_agent'], 0, 120)) ?></span></td>
+          <td class="coords"><?= e($dv['last_ip'] ?? '') ?></td>
+          <td style="white-space:nowrap"><?= e(fmtDate($dv['first_seen'])) ?></td>
+          <td style="white-space:nowrap"><?= e(fmtDate($dv['last_seen'])) ?></td>
+          <td class="num"><?= (int)$dv['uses'] ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <p class="help" style="margin:.5rem 0 0">Il codice dispositivo è generato dal browser del telefono alla prima timbratura e resta finché non si cancellano i dati del sito. Più codici per lo stesso dipendente = più telefoni o browser diversi.</p>
+  <?php endif; ?>
+</div>
+
+<div class="card">
   <h2>Prova e storico webhook</h2>
   <?php if (validWebhookUrl($editing['webhook_url'])): ?>
     <form method="post" class="inline">

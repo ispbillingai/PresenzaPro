@@ -5,6 +5,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/attendance.php';
+require_once __DIR__ . '/device.php';
 
 const REJECT_LABELS = [
     'no_assignment' => 'Nessuna sede assegnata',
@@ -152,9 +153,19 @@ function isOnPermit(?array $last): bool
 /**
  * Validate and record a clock attempt. Every attempt is stored, accepted or rejected.
  */
-function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?float $accuracy, ?int $fixTs, ?string $note = null, ?string $permitCode = null): array
+function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?float $accuracy, ?int $fixTs, ?string $note = null, ?string $permitCode = null, ?array $client = null): array
 {
     $userId = (int)$user['id'];
+    $device = sanitizeDevice($client);
+    $userAgent = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500) ?: null;
+    $newDevice = touchDevice($userId, $device['id'], $device['info'], $userAgent);
+    $clientInfo = requestOrigin() + $device['info'] + ['device_id' => $device['id'], 'user_agent' => $userAgent];
+    if ($newDevice) {
+        $clientInfo['new_device'] = true;
+    }
+    if (isset($device['info']['client_time']) && is_numeric($device['info']['client_time'])) {
+        $clientInfo['clock_skew_s'] = (int)round((float)$device['info']['client_time'] / 1000 - time());
+    }
     if (!isset(CLOCK_TYPE_LABELS[$type])) {
         $type = 'in';
     }
@@ -194,8 +205,8 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
 
     $status = $reason === null ? 'accepted' : 'rejected';
     q(
-        'INSERT INTO clockings (user_id, location_id, type, status, reject_reason, latitude, longitude, accuracy_m, distance_m, fix_at, ip, user_agent, note, request_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO clockings (user_id, location_id, type, status, reject_reason, latitude, longitude, accuracy_m, distance_m, fix_at, ip, user_agent, device_id, client_info, note, request_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $userId,
             $matched ? (int)$matched['id'] : null,
@@ -208,7 +219,9 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
             $distance !== null ? round($distance, 1) : null,
             $fixTs !== null ? date('Y-m-d H:i:s', $fixTs) : null,
             clientIp(),
-            substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+            $userAgent,
+            $device['id'],
+            json_encode($clientInfo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             $note !== null ? substr($note, 0, 255) : null,
             ($status === 'accepted' && $permit) ? (int)$permit['id'] : null,
         ]
@@ -256,6 +269,7 @@ function recordClocking(array $user, string $type, ?float $lat, ?float $lng, ?fl
         'permit_codes_today' => permitCodesToday($userId),
         'return_by' => ($status === 'accepted' && $permit && $permit['hours'] !== null) ? date('H:i', time() + (int)round((float)$permit['hours'] * 3600)) : null,
         'permit_hours' => $permit ? $permit['hours'] : null,
+        'new_device' => $newDevice,
         'next_type' => $allowed[0],
     ];
 }

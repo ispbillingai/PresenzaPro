@@ -21,6 +21,13 @@ ore lavorate (coppie entrata/uscita accettate, manuali comprese, annullate esclu
 (presente, assente, ferie, permesso, malattia, riposo, festivo), ritardo e uscita anticipata oltre la
 tolleranza del turno, straordinario oltre `overtime_min_minutes`, uscite mancanti. Un giustificativo
 senza ore copre l'intera giornata; con le ore riduce le ore previste di quel giorno.
+**Origine delle timbrature** (`includes/device.php`, migration 007): ogni timbratura salva IP sorgente, header
+di origine, user agent completo, un **codice dispositivo** persistente generato dal browser (localStorage) e i
+dettagli riportati dal telefono (piattaforma, modello, browser, SO, schermo, fuso orario, lingua, rete, app
+installata, ora del telefono e scarto rispetto al server) in `clockings.client_info` (JSON). I dispositivi sono
+censiti per dipendente in `devices` (prima/ultima volta, usi, ultimo IP); la prima timbratura da un dispositivo
+nuovo è evidenziata in Timbrature e i dettagli si aprono con "dettagli".
+
 **Webhook**: per ogni dipendente si può impostare un URL (`users.webhook_url`, attivabile per dipendente e
 globalmente con `settings.webhooks_enabled`) chiamato in GET dopo ogni timbratura accettata, con segnaposto
 `{user_id} {username} {name} {type} {type_label} {date} {time} {datetime} {timestamp} {location} {lat} {lng} {clocking_id}`

@@ -137,6 +137,11 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 
 #map { height: 340px; border-radius: 10px; border: 1px solid var(--border); margin: .5rem 0 1rem; }
 .coords { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; color: var(--muted); }
+td.origin { font-size: .82rem; max-width: 220px; }
+.origin-details summary { cursor: pointer; color: var(--brand); font-size: .8rem; }
+.origin-details .kv { font-size: .75rem; margin-top: .3rem; }
+.origin-details .kv th { text-align: left; padding: .15rem .4rem .15rem 0; text-transform: none; letter-spacing: 0; white-space: nowrap; background: none; }
+.origin-details .kv td { padding: .15rem 0; word-break: break-all; }
 
 @media (max-width: 640px) {
   .topbar-inner { padding: .5rem .75rem; }

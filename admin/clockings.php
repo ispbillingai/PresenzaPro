@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/layout.php';
 require_once dirname(__DIR__) . '/includes/clocking.php';
+require_once dirname(__DIR__) . '/includes/device.php';
 
 $user = requireRole('admin');
 $employees = fetchAll('SELECT id, full_name FROM users WHERE role = "employee" ORDER BY is_active DESC, full_name');
@@ -72,13 +73,14 @@ if (($_GET['export'] ?? '') === 'csv') {
     header('Content-Disposition: attachment; filename="timbrature_' . $from . '_' . $to . '.csv"');
     $out = fopen('php://output', 'w');
     fwrite($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['Data', 'Ora', 'Dipendente', 'Utente', 'Tipo', 'Esito', 'Motivo', 'Origine', 'Sede', 'Distanza (m)', 'Precisione (m)', 'Latitudine', 'Longitudine', 'IP', 'Nota'], ';');
+    fputcsv($out, ['Data', 'Ora', 'Dipendente', 'Utente', 'Tipo', 'Esito', 'Motivo', 'Origine', 'Sede', 'Distanza (m)', 'Precisione (m)', 'Latitudine', 'Longitudine', 'IP', 'Codice dispositivo', 'Dispositivo', 'Nuovo dispositivo', 'User agent', 'Nota'], ';');
     foreach (array_reverse($rows) as $r) {
         fputcsv($out, [
             fmtDate($r['clocked_at'], 'd/m/Y'), fmtDate($r['clocked_at'], 'H:i:s'), $r['full_name'], $r['username'],
             clockTypeLabel($r['type']), ['accepted' => 'Accettata', 'rejected' => 'Rifiutata', 'voided' => 'Annullata'][$r['status']],
             rejectLabel($r['reject_reason']), $r['source'] === 'manual' ? 'Manuale' : 'GPS', $r['location_name'] ?? '', $r['distance_m'] ?? '', $r['accuracy_m'] ?? '',
-            $r['latitude'] ?? '', $r['longitude'] ?? '', $r['ip'] ?? '', $r['note'] ?? '',
+            $r['latitude'] ?? '', $r['longitude'] ?? '', $r['ip'] ?? '', $r['device_id'] ?? '', deviceLabel(json_decode((string)$r['client_info'], true) ?: null),
+            str_contains((string)$r['client_info'], '"new_device":true') ? 'sì' : '', $r['user_agent'] ?? '', $r['note'] ?? '',
         ], ';');
     }
     fclose($out);
@@ -161,7 +163,7 @@ pageStart('Timbrature', $user);
   <p class="help" style="margin:0 0 .5rem"><?= count($rows) ?> timbrature<?= count($rows) >= 2000 ? ' (mostrate le prime 2000, restringi il periodo)' : '' ?></p>
   <?php if ($rows): ?>
   <table>
-    <thead><tr><th>Data e ora</th><th>Dipendente</th><th>Tipo</th><th>Esito</th><th>Sede</th><th class="num">Distanza</th><th class="num">Precisione</th><th>Posizione</th><th>Note</th><th></th></tr></thead>
+    <thead><tr><th>Data e ora</th><th>Dipendente</th><th>Tipo</th><th>Esito</th><th>Sede</th><th class="num">Distanza</th><th class="num">Precisione</th><th>Posizione</th><th>Origine</th><th>Note</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): ?>
       <tr class="<?= $r['status'] === 'voided' ? 'muted' : '' ?>">
@@ -182,7 +184,28 @@ pageStart('Timbrature', $user);
             <a class="coords" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=<?= e((string)$r['latitude']) ?>&mlon=<?= e((string)$r['longitude']) ?>#map=18/<?= e((string)$r['latitude']) ?>/<?= e((string)$r['longitude']) ?>">mappa</a>
           <?php endif; ?>
         </td>
-        <td class="help"><?= e($r['note'] ?? '') ?><?= $r['source'] === 'manual' && $r['admin_name'] ? ' (' . e($r['admin_name']) . ')' : '' ?></td>
+        <td class="origin">
+          <?php $ci = json_decode((string)$r['client_info'], true) ?: []; ?>
+          <?php if ($r['source'] === 'manual'): ?>
+            <span class="help">inserita da <?= e($r['admin_name'] ?? 'admin') ?><?= $r['ip'] ? ' · IP ' . e($r['ip']) : '' ?></span>
+          <?php else: ?>
+            <span class="coords"><?= e($r['ip'] ?? '') ?></span>
+            <?php if ($r['device_id']): ?><br><span class="coords" title="<?= e($r['device_id']) ?>">disp. <?= e(substr($r['device_id'], 0, 8)) ?></span><?php endif; ?>
+            <?php if ($ci): ?><br><span class="help"><?= e(deviceLabel($ci)) ?></span><?php endif; ?>
+            <?php if (!empty($ci['new_device'])): ?> <span class="badge badge-warn">nuovo dispositivo</span><?php endif; ?>
+            <?php if (isset($ci['clock_skew_s']) && abs((int)$ci['clock_skew_s']) > 300): ?> <span class="badge badge-rej" title="L'orologio del telefono differisce dal server">orologio ±<?= (int)abs((int)$ci['clock_skew_s']) ?>s</span><?php endif; ?>
+            <?php if ($ci): ?>
+            <details class="origin-details"><summary>dettagli</summary>
+              <table class="kv"><tbody>
+              <?php foreach (clientInfoRows($r['client_info']) as [$k, $v]): ?>
+                <tr><th><?= e($k) ?></th><td><?= e($v) ?></td></tr>
+              <?php endforeach; ?>
+              </tbody></table>
+            </details>
+            <?php endif; ?>
+          <?php endif; ?>
+        </td>
+        <td class="help"><?= e($r['note'] ?? '') ?></td>
         <td>
           <?php if ($r['status'] === 'accepted'): ?>
           <form method="post" class="inline" onsubmit="return confirm('Annullare questa timbratura? Non verrà conteggiata nelle ore.')">

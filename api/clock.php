@@ -31,7 +31,7 @@ $fixTs = isset($in['fix_ts']) && is_numeric($in['fix_ts']) ? (int)round((float)$
 $note = isset($in['note']) && is_string($in['note']) ? trim($in['note']) : null;
 $code = isset($in['code']) && is_string($in['code']) ? trim($in['code']) : null;
 
-$result = recordClocking($user, $type, $lat, $lng, $acc, $fixTs, $note ?: null, $code ?: null);
+$result = recordClocking($user, $type, $lat, $lng, $acc, $fixTs, $note ?: null, $code ?: null, isset($in['device']) && is_array($in['device']) ? $in['device'] : null);
 
 // Send the response now, then call the webhook so the employee never waits for it.
 $json = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

@@ -17,6 +17,62 @@
   try { labels = JSON.parse(root.dataset.labels || '{}'); } catch (e) {}
   try { locations = JSON.parse(root.dataset.locations || '[]'); } catch (e) {}
 
+  // ----- Device identity and details (sent with every clocking) -----
+  var pageLoadedAt = Date.now();
+  function deviceId() {
+    var id = null;
+    try { id = localStorage.getItem('pp_device_id'); } catch (e) {}
+    if (!id || !/^[a-f0-9]{32}$/.test(id)) {
+      var bytes = new Uint8Array(16);
+      if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+      else for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+      id = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      try { localStorage.setItem('pp_device_id', id); } catch (e) {}
+    }
+    return id;
+  }
+  function detectDevice() {
+    var ua = navigator.userAgent || '';
+    var platform = 'Altro', model = '', browser = '';
+    if (/iPhone/.test(ua)) { platform = 'iPhone'; }
+    else if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) { platform = 'iPad'; }
+    else if (/Android/.test(ua)) { platform = 'Android'; var m = ua.match(/Android [\d.]+; ([^;)]+)\)/); if (m) model = m[1].replace(/ Build.*/, '').trim(); }
+    else if (/Windows/.test(ua)) { platform = 'Windows'; }
+    else if (/Macintosh/.test(ua)) { platform = 'Mac'; }
+    else if (/Linux/.test(ua)) { platform = 'Linux'; }
+    if (/Edg\//.test(ua)) browser = 'Edge';
+    else if (/SamsungBrowser/.test(ua)) browser = 'Samsung Internet';
+    else if (/OPR\//.test(ua)) browser = 'Opera';
+    else if (/Firefox\//.test(ua)) browser = 'Firefox';
+    else if (/CriOS/.test(ua)) browser = 'Chrome iOS';
+    else if (/Chrome\//.test(ua)) browser = 'Chrome';
+    else if (/Safari\//.test(ua)) browser = 'Safari';
+    var os = '';
+    var mo = ua.match(/(iPhone OS|CPU OS|Android|Windows NT|Mac OS X) ([\d._]+)/);
+    if (mo) os = mo[1].replace('CPU OS', 'iOS').replace('iPhone OS', 'iOS').replace('Windows NT', 'Windows') + ' ' + mo[2].replace(/_/g, '.');
+    var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    return {
+      platform: platform, model: model, browser: browser, os: os,
+      screen: (screen.width || 0) + 'x' + (screen.height || 0),
+      viewport: window.innerWidth + 'x' + window.innerHeight,
+      pixel_ratio: window.devicePixelRatio || 1,
+      timezone: (Intl.DateTimeFormat && Intl.DateTimeFormat().resolvedOptions().timeZone) || '',
+      tz_offset: -new Date().getTimezoneOffset(),
+      language: navigator.language || '',
+      languages: (navigator.languages || []).join(','),
+      touch: ('ontouchstart' in window) || navigator.maxTouchPoints > 0,
+      standalone: !!standalone,
+      connection: conn ? ((conn.type ? conn.type + ' ' : '') + (conn.effectiveType || '')).trim() : '',
+      online: navigator.onLine !== false,
+      cookies: navigator.cookieEnabled !== false,
+      memory: navigator.deviceMemory || null,
+      cores: navigator.hardwareConcurrency || null,
+      client_time: Date.now(),
+      page_loaded_s: Math.round((Date.now() - pageLoadedAt) / 1000)
+    };
+  }
+
   var fix = null;      // last position
   var sending = false;
 
@@ -202,7 +258,7 @@
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-      body: JSON.stringify({ type: type, lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, fix_ts: fix.ts, code: code })
+      body: JSON.stringify({ type: type, lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, fix_ts: fix.ts, code: code, device: { id: deviceId(), info: detectDevice() } })
     }).then(function (res) {
       return res.json().then(function (data) { return { status: res.status, data: data }; });
     }).then(function (r) {
